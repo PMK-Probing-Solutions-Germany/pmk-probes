@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling", "pyserial"]
+requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
@@ -7,7 +7,7 @@ packages = ["pmk_probes"]
 
 [project]
 name = "pmk-probes"
-version = "1.0.3"
+version = "1.0.4"
 authors = [
   { name="Felix Wenk", email="felix.wenk@pmk.de" },
 ]
@@ -18,6 +18,9 @@ license = "BSD-3-Clause"
 classifiers = [
     "Programming Language :: Python :: 3",
     "Operating System :: OS Independent",
+]
+dependencies = [
+    "pyserial",
 ]
 
 [project.urls]
