@@ -7,7 +7,7 @@ packages = ["pmk_probes"]
 
 [project]
 name = "pmk-probes"
-version = "1.0.4"
+version = "1.0.6"
 authors = [
   { name="Felix Wenk", email="felix.wenk@pmk.de" },
 ]
@@ -20,8 +20,9 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "pyserial",
+    "pyserial >= 3.5",
 ]
 
 [project.urls]
 Homepage = "http://www.pmk.de/"
+Documentation = "https://pmk-probes.readthedocs.io/en/latest/"

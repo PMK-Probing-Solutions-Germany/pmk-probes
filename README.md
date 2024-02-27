@@ -24,7 +24,7 @@ from pmk_probes.power_supplies import PS03, Channel
 ps = PS03('<YOUR_COM_PORT>')  # replace with the COM port of your power supply or specify ip_address parameter 
 bumblebee1 = BumbleBee2kV(ps, Channel.CH1)  # use the BumbleBee probe on channel 1
 print(bumblebee1.metadata.serial_number)  # print the serial number of the probe
-bumblebee1.attenuation = 500  # set the attenuation to 10x
+bumblebee1.attenuation = 500  # set the attenuation to 500x
 ```
 
 ## License
