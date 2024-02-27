@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.abspath('../../pmk_probes/'))
 project = 'PMK Probes'
 copyright = '2024, PMK Mess- und Kommunikationstechnik GmbH'
 author = 'Felix Wenk'
-release = '1.0.1'
+release = '1.0.6'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration

@@ -9,7 +9,7 @@ Welcome to PMK Probes's documentation!
 This is the official documentation for PMK Probes, a Python package to control probes by PMK Mess- und Kommunikationstechnik GmbH.
 
 .. toctree::
-   :maxdepth: 10
+   :maxdepth: 3
    :caption: Contents:
 
    installation
