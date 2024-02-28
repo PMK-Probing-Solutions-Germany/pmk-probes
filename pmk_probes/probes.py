@@ -1,14 +1,12 @@
 """ This module contains classes for controlling PMK probes. The classes are designed to be used with PMK power
 supplies"""
 
-import datetime
 import logging
 import time
 from abc import ABCMeta, abstractmethod
-from collections import namedtuple
-from enum import Enum, auto
-from functools import cached_property, lru_cache
-from typing import Literal, Any
+from enum import Enum
+from functools import lru_cache
+from typing import Literal
 
 from .power_supplies import _PMKPowerSupply
 from ._data_structures import PMKMetadata, UUIDs, UserMapping, FireFlyMetadata, PMKProbeProperties, LED
