@@ -3,7 +3,7 @@ import struct
 from dataclasses import dataclass, fields
 import datetime
 from enum import Enum, auto
-from typing import ClassVar, Any, Union, NamedTuple
+from typing import ClassVar, Any, Union, NamedTuple, TypeVar
 
 date_format = "%Y%m%d"
 
@@ -156,9 +156,6 @@ class FireFlyMetadata(PMKMetadata):
 
     propagation_delay: float
 
-    # addresses = {0x04, 0x07, 0x0B, 0x2B, 0x3B, 0x61, 0x69, 0x71, 0x75, 0x8E, 0xA7, 0xBB};
-    # length = {3, 4, 17, 7, 37, 8, 8, 3, 22, 13, 11, 4};
-
     metadata_map = {
         "eeprom_layout_revision": (0x04, 3),
         "serial_number": (0x07, 4),
@@ -175,7 +172,7 @@ class FireFlyMetadata(PMKMetadata):
     }
 
     @classmethod
-    def from_bytes(cls, metadata: bytes) -> Union["PMKMetadata", None]:
+    def from_bytes(cls, metadata: bytes) -> Union["FireFlyMetadata", None]:
         values = []
         for field in fields(cls):
             address, length = cls.metadata_map[field.name]

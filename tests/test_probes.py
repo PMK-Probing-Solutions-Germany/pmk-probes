@@ -16,7 +16,7 @@ def round_down(n, decimals=0):
 
 @pytest.fixture()
 def ps():
-    ps = PS03(com_port="COM26")
+    ps = PS03(ip_address="10.8.80.114")
     yield ps
     ps.close()
 
@@ -186,6 +186,7 @@ class TestFireFly:
         print(firefly.metadata)
 
     def test_auto_zero(self, firefly: FireFly):
+        firefly.probe_head_on = True  # probe head must be on to perform auto zero
         firefly.auto_zero()
 
     def test_probe_head_on(self, firefly: FireFly):

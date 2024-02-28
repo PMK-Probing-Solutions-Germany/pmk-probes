@@ -3,6 +3,7 @@ supplies"""
 
 import logging
 import time
+import typing
 from abc import ABCMeta, abstractmethod
 from enum import Enum
 from functools import lru_cache
@@ -190,8 +191,7 @@ class _BumbleBee(_PMKProbe, metaclass=ABCMeta):
         {"no overload": 0, "positive overload": 1, "negative overload": 2, "main overload": 4})
     _legacy_model_name = "BumbleBee"
 
-    def __init__(self, power_supply: _PMKPowerSupply, channel: Channel,
-                 verbose: bool = False):
+    def __init__(self, power_supply: _PMKPowerSupply, channel: Channel, verbose: bool = False):
         super().__init__(power_supply, channel, verbose)
 
     def _read_float(self, setting_address: int):
@@ -574,10 +574,15 @@ class FireFly(_PMKProbe):
                                   scaling_factor=None)
 
     @lru_cache
-    def _read_metadata(self) -> PMKMetadata:
+    def _read_metadata(self) -> FireFlyMetadata:
         self._query("WR", i2c_address=self._i2c_addresses['metadata'], command=0x0C01, payload=DUMMY * 2, length=0x02)
         return FireFlyMetadata.from_bytes(self._query("RD", i2c_address=self._i2c_addresses['metadata'], command=0x1000,
                                                       length=0xBF))
+
+    @property
+    def metadata(self) -> FireFlyMetadata:
+        """Read the probe's metadata."""
+        return typing.cast(FireFlyMetadata, super().metadata)
 
     @property
     def probe_status_led(self):
@@ -599,7 +604,7 @@ class FireFly(_PMKProbe):
     def battery_indicator(self) -> tuple[LED, LED, LED, LED]:
         """Returns the state of the battery indicator LEDs on the interface board.
 
-        The tuple contains the states of the four LEDs from the bottom to the top."""
+        The tuple contains the states of the four physical LEDs from bottom to top."""
         levels = {
             2322: (LED.Off, LED.Off, LED.Off, LED.Off),
             2777: (LED.BlinkingRed, LED.Off, LED.Off, LED.Off),
