@@ -10,7 +10,6 @@ import os
 import sys
 
 sys.path.append(os.path.abspath('../..'))
-sys.path.insert(0, os.path.abspath('../../pmk_probes/'))
 
 project = 'PMK Probes'
 copyright = '2024, PMK Mess- und Kommunikationstechnik GmbH'

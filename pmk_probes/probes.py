@@ -6,21 +6,22 @@ import logging
 import time
 from abc import ABCMeta, abstractmethod
 from collections import namedtuple
-from enum import Enum
+from enum import Enum, auto
 from functools import cached_property, lru_cache
 from typing import Literal, Any
 
 from .power_supplies import _PMKPowerSupply
-from ._data_structures import PMKMetadata, UUIDs, UserMapping, FireFlyMetadata, PMKProbeProperties
+from ._data_structures import PMKMetadata, UUIDs, UserMapping, FireFlyMetadata, PMKProbeProperties, LED
 from ._devices import PMKDevice, Channel
 from ._errors import ProbeTypeError, ProbeReadError, ProbeConnectionError, ProbeInitializationError
 
 # Constants for communication
-STX = b"\x02"
-ACK = b"\x06"
-NACK = b"\x15"
-ETX = b"\x03"
-CR = b"\r"
+DUMMY = b'\x00'
+STX = b'\x02'
+ACK = b'\x06'
+NACK = b'\x15'
+ETX = b'\x03'
+CR = b'\r'
 
 
 def _unsigned_to_bytes(command: int, length: int) -> bytes:
@@ -64,7 +65,8 @@ class _PMKProbe(PMKDevice, metaclass=ABCMeta):
     @property
     @abstractmethod
     def properties(self) -> PMKProbeProperties:
-        """The properties of the device."""
+        """Properties of the specific probe model, similar to metadata but stored in the Python package instead of
+        the probe's flash."""
         raise NotImplementedError
 
     def _init_using(self, metadata_value, expected_value):
@@ -100,8 +102,6 @@ class _PMKProbe(PMKDevice, metaclass=ABCMeta):
         Read the probe's metadata.
 
         :getter: Returns the probe's metadata.
-        :setter: Writes the probe's metadata.
-        :type: PMKMetadata
         """
         try:
             return self._read_metadata()
@@ -490,11 +490,15 @@ class _HSDP(_PMKProbe, metaclass=ABCMeta):
 
     @property
     def offset(self):
+        """
+        Set the offset of the probe in V. Reading the offset is not supported for HSDP probes.
+
+        :setter: Change the offset of the probe.
+        """
         raise NotImplementedError(f"Offset cannot be read for probe {self.probe_model}.")
 
     @offset.setter
-    def offset(self, offset: int):
-        """ HSDP has byte-wise write access to offset"""
+    def offset(self, offset: float):
         # calculate the offset in bytes
         offset_rescaled = int(offset * 0x7FFF / (self.properties.attenuation_ratios.get_user_value(1) * 6 / 5) + 0x8000)
         self._query("WR", i2c_address=self._i2c_addresses['offset'], command=0x30,
@@ -551,21 +555,93 @@ class HSDP4010(_HSDP):
 
 class FireFly(_PMKProbe):
     """Class for controlling the FireFly probe. See http://www.pmk.de/en/products/firefly for specifications."""
+
+    class ProbeStates(Enum):
+        """ Enumeration of the possible states of the FireFly probe indicated by the Probe Status LED."""
+        NotPowered = b'\x00'
+        ProbeHeadOff = b'\x01'
+        WarmingUp = b'\x02'
+        ReadyToUse = b'\x03'
+        EmptyOrNoBattery = b'\x04'
+        Error = b'\x05'
+
     _i2c_addresses: dict[str, int] = {"unified": 0x04, "metadata": 0x04}  # BumbleBee only has one I2C address
     _addressing: str = "W"
+    _probe_head_on = UserMapping({True: 1, False: 0})
+
+    @property
+    def properties(self) -> PMKProbeProperties:
+        return PMKProbeProperties(input_voltage_range=(-1, +1),
+                                  attenuation_ratios=UserMapping({1: 1}),
+                                  scaling_factor=None)
 
     @lru_cache
     def _read_metadata(self) -> PMKMetadata:
-        self._query("WR", i2c_address=self._i2c_addresses['metadata'], command=0x0C01, payload=b'\x00' * 2, length=0x02)
+        self._query("WR", i2c_address=self._i2c_addresses['metadata'], command=0x0C01, payload=DUMMY * 2, length=0x02)
         return FireFlyMetadata.from_bytes(self._query("RD", i2c_address=self._i2c_addresses['metadata'], command=0x1000,
                                                       length=0xBF))
 
     @property
-    def probe_head_status(self):
-        return self._setting_read(0x090A, 1)
+    def probe_status_led(self):
+        """Returns the state of the probe status LED."""
+        return self.ProbeStates(self._setting_read(0x080B, 1))
+
+    def _battery_adc(self) -> int:
+        """Read the battery voltage from the probe head's ADC."""
+        return int.from_bytes(self._setting_read(0x0800, 4), byteorder="big", signed=False)
+
+    @property
+    def battery_voltage(self) -> float:
+        """Return the current battery voltage in V.
+
+        Caution: This value is not available immediately after turning off the probe head. It takes approximately 200 milliseconds to become available. Before that the battery voltage will read as 0.0."""
+        return 2.47 / 4096 / 0.549 * self._battery_adc()
+
+    @property
+    def battery_indicator(self) -> tuple[LED, LED, LED, LED]:
+        """Returns the state of the battery indicator LEDs on the interface board.
+
+        The tuple contains the states of the four LEDs from the bottom to the top."""
+        levels = {
+            2322: (LED.Off, LED.Off, LED.Off, LED.Off),
+            2777: (LED.BlinkingRed, LED.Off, LED.Off, LED.Off),
+            3141: (LED.Yellow, LED.Off, LED.Off, LED.Off),
+            3323: (LED.Green, LED.Off, LED.Off, LED.Off),
+            3505: (LED.Green, LED.Green, LED.Off, LED.Off),
+            3596: (LED.Green, LED.Green, LED.Green, LED.Off),
+            4096: (LED.Green, LED.Green, LED.Green, LED.Green)
+        }
+        if not self.probe_head_on:
+            return levels[2322]  # if the probe head is off, the battery indicator is off
+        battery_level = self._battery_adc()
+        for i, limit in enumerate(levels.keys()):
+            if battery_level <= limit:
+                return levels[limit]
+        raise ValueError(f"Invalid battery level {battery_level}.")
+
+    @property
+    def probe_head_on(self) -> bool:
+        """
+        Attribute that determines whether the probe head is on or off.
+
+        :getter: Returns the current state of the probe head.
+        :setter: Sets the state of the probe head and waits until the attribute change is reflected when reading its state from the probe head. If the probe head is already in the desired state, no action is taken.
+        """
+        return self._probe_head_on.get_user_value(int.from_bytes(self._setting_read(0x090A, 1)))
+
+    @probe_head_on.setter
+    def probe_head_on(self, value: bool):
+        if self.probe_head_on != value:
+            self._wr_command(0x0803, self._i2c_addresses['unified'], DUMMY)
+            timeout = time.time() + 5
+            sleep_time = 0.1
+            while self.probe_head_on != value and time.time() < timeout:
+                time.sleep(sleep_time)
+        else:
+            pass  # no need to do anything if the probe head is already in the desired state
 
     def auto_zero(self):
-        self._wr_command(0x0A10, self._i2c_addresses['unified'], b'\x00')
+        self._wr_command(0x0A10, self._i2c_addresses['unified'], DUMMY)
 
 
 _ALL_PMK_PROBES = (

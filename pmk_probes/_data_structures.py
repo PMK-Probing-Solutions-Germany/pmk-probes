@@ -2,6 +2,7 @@ import logging
 import struct
 from dataclasses import dataclass, fields
 import datetime
+from enum import Enum, auto
 from typing import ClassVar, Any, Union, NamedTuple
 
 date_format = "%Y%m%d"
@@ -70,6 +71,7 @@ class PMKProbeProperties(NamedTuple):
     input_voltage_range: tuple[float, float]  # (lower, upper)
     attenuation_ratios: UserMapping  # tuple of all selectable attenuation ratios, descending order
     scaling_factor: float | None  # factor used when interpreting 2-byte short values as decimal values
+
 
 @dataclass
 class PMKMetadata:
@@ -147,14 +149,15 @@ class PMKMetadata:
         metadata_bytes = self.to_bytes()
         return list(_batched_string(metadata_bytes, self.page_size))
 
+
 @dataclass
 class FireFlyMetadata(PMKMetadata):
     """ FireFly has special metadata because it has at least one more field than all other PMK probes. """
 
     propagation_delay: float
 
-    #addresses = {0x04, 0x07, 0x0B, 0x2B, 0x3B, 0x61, 0x69, 0x71, 0x75, 0x8E, 0xA7, 0xBB};
-    #length = {3, 4, 17, 7, 37, 8, 8, 3, 22, 13, 11, 4};
+    # addresses = {0x04, 0x07, 0x0B, 0x2B, 0x3B, 0x61, 0x69, 0x71, 0x75, 0x8E, 0xA7, 0xBB};
+    # length = {3, 4, 17, 7, 37, 8, 8, 3, 22, 13, 11, 4};
 
     metadata_map = {
         "eeprom_layout_revision": (0x04, 3),
@@ -176,6 +179,13 @@ class FireFlyMetadata(PMKMetadata):
         values = []
         for field in fields(cls):
             address, length = cls.metadata_map[field.name]
-            field_value = metadata[address:address+length].decode("utf-8")
+            field_value = metadata[address:address + length].decode("utf-8")
             values.append(cls._parse_field(field, field_value))
         return cls(*values)
+
+
+class LED(Enum):
+    Green = auto()
+    Yellow = auto()
+    BlinkingRed = auto()
+    Off = auto()
