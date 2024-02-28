@@ -27,6 +27,10 @@ print(bumblebee1.metadata.serial_number)  # print the serial number of the probe
 bumblebee1.attenuation = 500  # set the attenuation to 500x
 ```
 
+## Documentation
+
+The documentation is available at [https://pmk-probes.readthedocs.io](https://pmk-probes.readthedocs.io).
+
 ## License
 
 [BSD-3-Clause](https://opensource.org/licenses/BSD-3-Clause)
