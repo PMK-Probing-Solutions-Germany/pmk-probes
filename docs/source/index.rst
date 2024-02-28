@@ -13,7 +13,7 @@ This is the official documentation for PMK Probes, a Python package to control p
    :caption: Contents:
 
    installation
-   supported_probes
+   supported_devices
    quickstart
    api
 

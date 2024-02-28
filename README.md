@@ -1,4 +1,4 @@
-# PMK Probes
+# PMK Probes [![Documentation Status](https://readthedocs.org/projects/pmk-probes/badge/?version=latest)](https://pmk-probes.readthedocs.io/en/latest/?badge=latest)
 
 pmk-probes is a Python package to control active oscilloscope probes by [PMK](http://www.pmk.de/).
 
@@ -26,6 +26,10 @@ bumblebee1 = BumbleBee2kV(ps, Channel.CH1)  # use the BumbleBee probe on channel
 print(bumblebee1.metadata.serial_number)  # print the serial number of the probe
 bumblebee1.attenuation = 500  # set the attenuation to 500x
 ```
+
+## Documentation
+
+The documentation is available at [https://pmk-probes.readthedocs.io](https://pmk-probes.readthedocs.io).
 
 ## License
 

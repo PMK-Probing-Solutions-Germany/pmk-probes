@@ -12,9 +12,7 @@ The following example demonstrates how to use the library to set the attenuation
    from pmk_probes.probes import BumbleBee2kV
    from pmk_probes.power_supplies import PS03, Channel
 
-   # Create a power supply object
    ps = PS03('COM3')  # replace 'COM3' with the actual serial port of the power supply
-   # Create a probe object
    bumblebee1 = BumbleBee2kV(ps, Channel.CH1)  # BumbleBee2kV probe at channel 1 of the power supply
    bumblebee1.attenuation = 500  # set the attenuation to 500
    print(bumblebee1.attenuation)  # should print 500
@@ -26,12 +24,6 @@ And this is how you would use auto zero on a FireFly probe:
    from pmk_probes.probes import BumbleBee2kV, FireFly
    from pmk_probes.power_supplies import PS03, Channel
 
-   # Create a power supply object
    ps = PS03('COM3')  # replace 'COM3' with the actual serial port of the power supply
-   # Create the probe objects
-   bumblebee1 = BumbleBee2kV(ps, Channel.CH1)  # BumbleBee2kV probe at channel 1 of the power supply
-   bumblebee1.attenuation = 500  # set the attenuation ratio to 500:1
-   print(bumblebee1.attenuation)  # should print 500
-
    firefly1 = FireFly(ps, Channel.CH2)  # FireFly probe at channel 2 of the power supply
    firefly1.auto_zero()  # auto zero the probe
