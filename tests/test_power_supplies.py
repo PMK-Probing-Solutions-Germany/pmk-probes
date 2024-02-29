@@ -1,12 +1,13 @@
 import pytest
 
-from pmk_probes._hardware_interfaces import USBInterface, LANInterface
-from pmk_probes.power_supplies import _PMKPowerSupply, PS02, PS03, Channel
+from pmk_probes._hardware_interfaces import USBInterface, LANInterface, find_power_supplies
+from pmk_probes.power_supplies import PS03
+from tests.config import *
 
 
 @pytest.fixture()
 def ps():
-    ps = PS03(com_port="COM11")
+    ps = PS03(**ps_connection_info)
     yield ps
     ps.close()
 
@@ -34,3 +35,7 @@ class TestPMKPowerSupply:
     def test_connected_probes(self, ps):
         print(ps.connected_probes)
         assert 1 == 0
+
+
+def test_find_power_supplies():
+    find_power_supplies()

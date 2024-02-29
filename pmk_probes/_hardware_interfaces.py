@@ -73,7 +73,7 @@ class USBInterface(HardwareInterface):
 PSConnectionInformation = namedtuple("PSConnectionInformation", ["ip_address", "model", "serial_number"])
 
 
-def scan_udp() -> list[PSConnectionInformation]:
+def find_power_supplies() -> list[PSConnectionInformation]:
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
     sock.settimeout(2)
@@ -99,4 +99,4 @@ def scan_udp() -> list[PSConnectionInformation]:
 
 
 if __name__ == "__main__":
-    print(scan_udp())
+    print(find_power_supplies())

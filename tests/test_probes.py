@@ -7,6 +7,7 @@ import pytest
 
 from pmk_probes.probes import BumbleBee2kV, HSDP2010, HSDP2050, FireFly, BumbleBee400V, Hornet4kV, LED
 from pmk_probes.power_supplies import PS03, Channel
+from tests.config import *
 
 
 def round_down(n, decimals=0):
@@ -16,24 +17,24 @@ def round_down(n, decimals=0):
 
 @pytest.fixture()
 def ps():
-    ps = PS03(ip_address="10.8.80.114")
+    ps = PS03(**ps_connection_info)
     yield ps
     ps.close()
 
 
 @pytest.fixture()
 def bumblebee(ps):
-    yield BumbleBee2kV(ps, Channel.CH1, verbose=True)
+    yield BumbleBee2kV(ps, test_bumblebee_channel, verbose=True)
 
 
 @pytest.fixture()
 def hsdp1(ps):
-    yield HSDP2010(ps, Channel.CH2, verbose=True)
+    yield HSDP2010(ps, test_hsdp_channel, verbose=True)
 
 
 @pytest.fixture()
 def firefly(ps):
-    yield FireFly(ps, Channel.CH3, verbose=True)
+    yield FireFly(ps, test_firefly_channel, verbose=True)
 
 
 class TestBumbleBee:
@@ -211,6 +212,7 @@ class TestFireFly:
         assert firefly.battery_indicator == (LED.Off, LED.Off, LED.Off, LED.Off)
         firefly.probe_head_on = True
         battery_fresh = ((LED.Green,) * (i + 1) + (LED.Off,) * (3 - i) for i in range(4))  # tuples of 1-4 green LEDs
+        print(firefly.battery_indicator)
         assert firefly.battery_indicator in battery_fresh  # battery is assumed to be fresh
 
     def test_battery_voltage(self, firefly: FireFly):
