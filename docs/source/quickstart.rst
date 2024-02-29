@@ -27,7 +27,7 @@ This is how you set the offset of a HSDP series probe:
 
    ps = PS03('COM3')  # replace 'COM3' with the actual serial port of the power supply
    hsdp1 = HSDP(ps, Channel.CH2)  # HSDP probe at channel 2 of the power supply
-   hsdp1.offset = 0.5  # set the offset to 0.5
+   hsdp1.offset = 0.5  # set the offset to 0.5 V
    print(hsdp1.offset)  # should print 0.5
 
 And this is how you would use auto-zero on a FireFly probe:

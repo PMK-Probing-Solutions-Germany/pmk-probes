@@ -1,11 +1,10 @@
-import asyncio
+import http.client
 import re
 import socket
 import time
 from abc import ABCMeta
 from collections import namedtuple
 
-import requests
 import serial
 
 from pmk_probes._errors import ProbeConnectionError
@@ -91,7 +90,9 @@ def _find_power_supplies() -> list[PSConnectionInformation]:
     full_info_list = []
     # read XML metadata from the power supplies' IP addresses by creating an HTTP request
     for ip in ps_ips:
-        text = requests.get(f"http://{ip}/PowerSupplyMetadata.xml").text
+        conn = http.client.HTTPConnection(ip)
+        conn.request("GET", "/PowerSupplyMetadata.xml")
+        text = conn.getresponse().read().decode()
         patterns = {"model": r"<Model>([\w-]{5})</Model>", "serial_number": r"<SerialNumber>(\d{4})</SerialNumber>"}
         metadata = {key: re.search(pattern, text).group(1) for key, pattern in patterns.items()}
         full_info_list.append(PSConnectionInformation(ip, **metadata))

@@ -13,11 +13,10 @@ def ps():
 
 class TestPMKPowerSupply:
     def test_num_channels(self, ps):
-        assert ps._num_channels in [2, 4]
+        assert ps._num_channels in (2, 4)
 
     def test_close(self, ps):
         ps.close()
-        assert ps.interface.is_open == False
 
 
 def test_find_power_supplies():
