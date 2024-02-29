@@ -1,7 +1,7 @@
 import pytest
 
-from pmk_probes._hardware_interfaces import USBInterface, LANInterface, find_power_supplies
-from pmk_probes.power_supplies import PS03
+from pmk_probes._hardware_interfaces import USBInterface, LANInterface
+from pmk_probes.power_supplies import PS03, find_power_supplies
 from tests.config import *
 
 

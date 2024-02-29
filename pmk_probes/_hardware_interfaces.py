@@ -73,7 +73,7 @@ class USBInterface(HardwareInterface):
 PSConnectionInformation = namedtuple("PSConnectionInformation", ["ip_address", "model", "serial_number"])
 
 
-def find_power_supplies() -> list[PSConnectionInformation]:
+def _find_power_supplies() -> list[PSConnectionInformation]:
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
     sock.settimeout(2)
@@ -96,7 +96,3 @@ def find_power_supplies() -> list[PSConnectionInformation]:
         metadata = {key: re.search(pattern, text).group(1) for key, pattern in patterns.items()}
         full_info_list.append(PSConnectionInformation(ip, **metadata))
     return full_info_list
-
-
-if __name__ == "__main__":
-    print(find_power_supplies())

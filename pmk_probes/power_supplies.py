@@ -1,15 +1,8 @@
 """This module contains the classes for the PMK power supplies."""
 
-from abc import abstractmethod
-from enum import Enum
-from typing import Literal
-
-import serial
-
 from ._data_structures import PMKMetadata
 from ._devices import PMKDevice, Channel
-from ._hardware_interfaces import LANInterface, USBInterface
-from ._errors import ProbeReadError
+from ._hardware_interfaces import LANInterface, USBInterface, _find_power_supplies, PSConnectionInformation
 
 
 class _PMKPowerSupply(PMKDevice):
@@ -87,3 +80,11 @@ class PS02(_PMKPowerSupply):
 class PS03(_PMKPowerSupply):
     """Class to control a PS03 power supply."""
     _num_channels = 4  # the PS03 has 4 channels
+
+
+def find_power_supplies() -> list[PSConnectionInformation]:
+    """
+    Finds all connected power supplies in your network.
+
+    """
+    return _find_power_supplies()
