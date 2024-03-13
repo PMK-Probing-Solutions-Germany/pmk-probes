@@ -1,7 +1,6 @@
 import http.client
 import re
 import socket
-import subprocess
 import time
 from abc import ABCMeta
 from collections import namedtuple
@@ -72,17 +71,34 @@ class USBInterface(HardwareInterface):
 
 PSConnectionInformation = namedtuple("PSConnectionInformation", ["ip_address", "model", "serial_number"])
 
+
 def _find_power_supplies() -> list[PSConnectionInformation]:
-    res = subprocess.run(["arp", "-a"], capture_output=True, text=True)
-    pattern = r"(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}).*00-80-a3.*"  # search for Lantronix OUI 00-80-a3
-    ps_ips = re.findall(pattern, res.stdout)
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    sock.bind((socket.gethostbyname(socket.gethostname()), 30718))
+    sock.settimeout(1)
+    sock.sendto(b'\x00\x00\x00\xf6', ('<broadcast>', 30718))
+    ps_ips = []
+    # Receive response
+    while True:
+        try:
+            data, addr = sock.recvfrom(1024)
+            if data.startswith(b'\x00\x00\x00\xf7'):
+                ps_ips.append(addr[0])
+        except socket.timeout:
+            break
+    sock.close()
     full_info_list = []
     # read XML metadata from the power supplies' IP addresses by creating an HTTP request
     for ip in ps_ips:
-        conn = http.client.HTTPConnection(ip)
-        conn.request("GET", "/PowerSupplyMetadata.xml")
-        text = conn.getresponse().read().decode()
-        patterns = {"model": r"<Model>([\w-]{5})</Model>", "serial_number": r"<SerialNumber>(\d{4})</SerialNumber>"}
-        metadata = {key: re.search(pattern, text).group(1) for key, pattern in patterns.items()}
-        full_info_list.append(PSConnectionInformation(ip, **metadata))
+        try:
+            conn = http.client.HTTPConnection(ip)
+            conn.request("GET", "/PowerSupplyMetadata.xml")
+            text = conn.getresponse().read().decode()
+            patterns = {"model": r"<Model>([\w-]{5})</Model>", "serial_number": r"<SerialNumber>(\d{4})</SerialNumber>"}
+            metadata = {key: re.search(pattern, text).group(1) for key, pattern in patterns.items()}
+            full_info_list.append(PSConnectionInformation(ip, **metadata))
+        except OSError:
+            pass
     return full_info_list

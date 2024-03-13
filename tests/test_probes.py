@@ -204,9 +204,9 @@ class TestFireFly:
 
     def test_probe_status_led(self, firefly: FireFly):
         firefly.probe_head_on = False  # turn off probe head
-        assert firefly.probe_status_led == firefly.ProbeStates.ProbeHeadOff
+        assert firefly.probe_status_led == firefly.ProbeStates.PROBE_HEAD_OFF
         firefly.probe_head_on = True  # turn on probe head
-        assert firefly.probe_status_led == firefly.ProbeStates.WarmingUp
+        assert firefly.probe_status_led == firefly.ProbeStates.WARMING_UP
 
     def test_battery_level(self, firefly: FireFly):
         firefly.probe_head_on = False  # turn off probe head
