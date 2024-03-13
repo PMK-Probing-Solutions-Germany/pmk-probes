@@ -121,7 +121,10 @@ class PMKMetadata:
             case "", _:
                 return None
             case _, datetime.datetime:
-                return datetime.datetime.strptime(field_value, DATE_FORMAT)
+                try:
+                    return datetime.datetime.strptime(field_value, DATE_FORMAT)
+                except ValueError:
+                    return None
             case _, _:
                 return field.type(field_value)
 

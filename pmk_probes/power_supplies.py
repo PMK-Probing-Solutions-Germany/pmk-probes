@@ -10,10 +10,12 @@ class _PMKPowerSupply(PMKDevice):
     The class that controls access to the serial resource of the PMK power supply.
 
     """
+    _i2c_addresses: dict[str, int] = {"metadata": 0x04}
+    _addressing = "W"
     _num_channels = None
 
-    def __init__(self, com_port: str = None, ip_address: str = None):
-        super().__init__(channel=Channel.PS_CH)
+    def __init__(self, com_port: str = None, ip_address: str = None, verbose: bool = False):
+        super().__init__(channel=Channel.PS_CH, verbose=verbose)
         from .probes import _ALL_PMK_PROBES  # to avoid circular imports
         self.supported_probe_types = _ALL_PMK_PROBES
         match com_port, ip_address:
@@ -27,14 +29,8 @@ class _PMKPowerSupply(PMKDevice):
                 raise ValueError("Only one of com_port or ip_address can be specified.")
 
     @property
-    def metadata(self) -> PMKMetadata:
-        """
-        The metadata of the power supply. Not yet implemented.
-
-        Returns:
-            PMKMetadata: The metadata of the power supply.
-        """
-        raise NotImplementedError
+    def _interface(self):
+        return self.interface
 
     # @property
     # def connected_probes(self):

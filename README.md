@@ -1,6 +1,6 @@
 # PMK Probes [![Documentation Status](https://readthedocs.org/projects/pmk-probes/badge/?version=latest)](https://pmk-probes.readthedocs.io/en/latest/?badge=latest)
 
-pmk-probes is a Python package to control active oscilloscope probes by [PMK](http://www.pmk.de/).
+pmk-probes is the official Python package to control active oscilloscope probes by [PMK](http://www.pmk.de/).
 
 ## Installation
 

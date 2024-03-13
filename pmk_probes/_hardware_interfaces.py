@@ -6,11 +6,16 @@ from abc import ABCMeta
 from collections import namedtuple
 
 import serial
+import serial.tools.list_ports
 
 from pmk_probes._errors import ProbeConnectionError
 
 
 class HardwareInterface(metaclass=ABCMeta):
+
+    def __init__(self, connection_info: str):
+        self.connection_info = connection_info
+
     def write(self, data: bytes):
         raise NotImplementedError
 
@@ -29,7 +34,7 @@ class HardwareInterface(metaclass=ABCMeta):
 
 class LANInterface(HardwareInterface):
     def __init__(self, ip_address: str):
-        super().__init__()
+        super().__init__(ip_address)
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.connect((ip_address, 10001))
 
@@ -50,7 +55,7 @@ class LANInterface(HardwareInterface):
 class USBInterface(HardwareInterface):
 
     def __init__(self, com_port: str):
-        super().__init__()
+        super().__init__(com_port)
         try:
             self.ser = serial.Serial(com_port, baudrate=115200, timeout=1, rtscts=False, dsrdtr=False)
         except serial.SerialException:
@@ -71,6 +76,21 @@ class USBInterface(HardwareInterface):
 
 PSConnectionInformation = namedtuple("PSConnectionInformation", ["ip_address", "model", "serial_number"])
 
+def _scan_serial_ports() -> list[PSConnectionInformation]:
+
+    devices = serial.tools.list_ports.comports()
+    power_supplies = []
+    for device in devices:
+        match device.vid, device.pid:
+            case 1027, 24577:
+                print("Found PMK power supply at", device.device)
+                from pmk_probes.power_supplies import PS03
+                ps = PS03(device.device, verbose=True)
+                power_supplies.append(PSConnectionInformation(device.device, ps.metadata.model, ps.metadata.serial_number))
+                ps.close()
+            case _:
+                pass
+    return power_supplies
 
 def _find_power_supplies() -> list[PSConnectionInformation]:
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
@@ -102,3 +122,6 @@ def _find_power_supplies() -> list[PSConnectionInformation]:
         except OSError:
             pass
     return full_info_list
+
+if __name__ == "__main__":
+    print(_scan_serial_ports())
