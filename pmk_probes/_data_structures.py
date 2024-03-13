@@ -5,7 +5,7 @@ import datetime
 from enum import Enum, auto
 from typing import ClassVar, Any, Union, NamedTuple, TypeVar
 
-date_format = "%Y%m%d"
+DATE_FORMAT = "%Y%m%d"
 
 # dictionary of UUIDs and their corresponding probe models
 # the key has to be the class name of the probe and the value is the UUID of the probe
@@ -51,7 +51,8 @@ class UserMapping:
 
     def shift(self, shift: int, start: Any):
         """
-        Returns the user value that is shift steps away from start. E.g. for shift=1 and start="red" the method returns "green".
+        Returns the user value that is shift steps away from start. E.g. for shift=1 and start="red" the method
+        returns "green".
         """
         as_list = list(self.user_to_integer)
         restricted_index = (as_list.index(start) + shift) % len(as_list)
@@ -100,15 +101,15 @@ class PMKMetadata:
     @classmethod
     def from_bytes(cls, metadata: bytes) -> Union["PMKMetadata", None]:
         metadata = metadata.replace(b"\xFF", b"").replace(b"?", b"")
-        values = []
+        values = {}
         try:
             for i, field in enumerate(fields(cls)):
                 field_value = metadata.split(b"\n")[i].decode("utf-8")
-                values.append(cls._parse_field(field, field_value))
-            return cls(*values)
-        except TypeError as e:
+                values[field.name] = cls._parse_field(field, field_value)
+            return cls(**values)
+        except TypeError as exc:
             logging.warning("Metadata present in the probe could not be parsed.")
-            logging.error(e)
+            logging.error(exc)
             return None
 
     @classmethod
@@ -120,7 +121,7 @@ class PMKMetadata:
             case "", _:
                 return None
             case _, datetime.datetime:
-                return datetime.datetime.strptime(field_value, date_format)
+                return datetime.datetime.strptime(field_value, DATE_FORMAT)
             case _, _:
                 return field.type(field_value)
 
@@ -141,7 +142,7 @@ class PMKMetadata:
             case None, _:
                 return b''  # append nothing to the metadata
             case _, datetime.datetime:
-                return field_value.strftime(date_format)
+                return field_value.strftime(DATE_FORMAT)
             case _, _:
                 return field_value
 
@@ -173,16 +174,17 @@ class FireFlyMetadata(PMKMetadata):
 
     @classmethod
     def from_bytes(cls, metadata: bytes) -> Union["FireFlyMetadata", None]:
-        values = []
+        # TODO: this is very similar to the method in PMKMetadata, maybe refactor
+        values = {}
         for field in fields(cls):
             address, length = cls.metadata_map[field.name]
             field_value = metadata[address:address + length].decode("utf-8")
-            values.append(cls._parse_field(field, field_value))
-        return cls(*values)
+            values[field.name] = cls._parse_field(field, field_value)
+        return cls(**values)
 
 
 class LED(Enum):
-    Green = auto()
-    Yellow = auto()
-    BlinkingRed = auto()
-    Off = auto()
+    GREEN = auto()
+    YELLOW = auto()
+    BLINKING_RED = auto()
+    OFF = auto()

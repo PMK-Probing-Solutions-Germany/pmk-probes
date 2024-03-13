@@ -20,4 +20,4 @@ class TestPMKPowerSupply:
 
 
 def test_find_power_supplies():
-    find_power_supplies()
+    print("PSs: ", find_power_supplies())

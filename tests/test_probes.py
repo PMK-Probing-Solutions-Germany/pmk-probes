@@ -40,9 +40,9 @@ def firefly(ps):
 class TestBumbleBee:
 
     def test_read_metadata(self, bumblebee):
-
         metadata = bumblebee.metadata
         print(metadata)
+        assert metadata is not None
 
     def test_print_offset(self, bumblebee):
         bumblebee.global_offset = 500
@@ -184,6 +184,7 @@ class TestHSDP:
 
 class TestFireFly:
     def test_read_metadata(self, firefly: FireFly):
+        assert firefly.metadata is not None
         print(firefly.metadata)
 
     def test_auto_zero(self, firefly: FireFly):
@@ -209,9 +210,9 @@ class TestFireFly:
 
     def test_battery_level(self, firefly: FireFly):
         firefly.probe_head_on = False  # turn off probe head
-        assert firefly.battery_indicator == (LED.Off, LED.Off, LED.Off, LED.Off)
+        assert firefly.battery_indicator == (LED.OFF,) * 4  # battery is assumed to be empty
         firefly.probe_head_on = True
-        battery_fresh = ((LED.Green,) * (i + 1) + (LED.Off,) * (3 - i) for i in range(4))  # tuples of 1-4 green LEDs
+        battery_fresh = ((LED.GREEN,) * (i + 1) + (LED.OFF,) * (3 - i) for i in range(4))  # tuples of 1-4 green LEDs
         print(firefly.battery_indicator)
         assert firefly.battery_indicator in battery_fresh  # battery is assumed to be fresh
 
@@ -223,9 +224,16 @@ class TestFireFly:
                 break
             slept += 0.01
             time.sleep(0.01)
-        print(f"Slept for {slept*1000} ms")
+        print(f"Slept for {slept * 1000} ms")
         off_voltage = firefly.battery_voltage
         firefly.probe_head_on = True
         on_voltage = firefly.battery_voltage
         assert on_voltage < off_voltage  # battery voltage should drop when probe head is on
         print(f"Off voltage: {off_voltage} V, On voltage: {on_voltage} V")
+
+
+def run_all_tests():
+    pytest.main([__file__])
+
+if __name__ == "__main__":
+    pytest.main([__file__])

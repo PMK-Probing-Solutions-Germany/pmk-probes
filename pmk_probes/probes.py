@@ -85,7 +85,7 @@ class _PMKProbe(PMKDevice, metaclass=ABCMeta):
         if uuid is not None:
             return uuid
         else:
-            raise NotImplementedError(f"Probe model has no UUID assigned. Please add it to the UUIDs dictionary.")
+            raise NotImplementedError("Probe model has no UUID assigned. Please add it to the UUIDs dictionary.")
 
     @lru_cache
     def _read_metadata(self) -> PMKMetadata:
@@ -104,9 +104,10 @@ class _PMKProbe(PMKDevice, metaclass=ABCMeta):
         """
         try:
             return self._read_metadata()
-        except ProbeReadError:
+        except ProbeReadError as exc:
             raise ProbeConnectionError(f"Could not read metadata. Please check if a probe of type {self.probe_model} is"
-                                       f" connected to {self.channel.name} of {self.power_supply.__class__.__name__}.")
+                                       f" connected to {self.channel.name} of {self.power_supply.__class__.__name__}.")\
+                from exc
 
     def _expect(self, expected: list[bytes]) -> None:
         """
@@ -164,18 +165,23 @@ class _PMKProbe(PMKDevice, metaclass=ABCMeta):
     def _setting_write(self, setting_address: int, setting_value: bytes):
         self._wr_command(setting_address, self._i2c_addresses['unified'], setting_value)
 
-    def _setting_read(self, setting_address: int, setting_byte_count: Literal[1, 2, 4]):
+    def _setting_read_raw(self, setting_address: int, setting_byte_count: Literal[1, 2, 4]):
         return self._rd_command(setting_address, self._i2c_addresses['unified'], setting_byte_count)
 
+    def _setting_read_int(self, setting_address: int, setting_byte_count: Literal[1, 2, 4], signed: bool = False):
+        return int.from_bytes(self._setting_read_raw(setting_address, setting_byte_count), "big", signed=signed)
+
     def _wr_command(self, command: int, i2c_address, payload: bytes) -> None:
-        """ The WR command is used to write data to the probe.
-        The payload is a bytes object that is written to the probe. Its length also needs to be supplied to the query command.
+        """
+        The WR command is used to write data to the probe. The payload is a bytes object that is written to the
+        probe. Its length also needs to be supplied to the query command.
         """
         _ = self._query("WR", i2c_address, command, payload, length=len(payload))
 
     def _rd_command(self, command: int, i2c_address, bytes_to_read: int) -> bytes:
-        """ The RD command is used to read data from the probe.
-        In contrast to the WR command, the length of the data is not the length of the payload, but the number of bytes to read.
+        """
+        The RD command is used to read data from the probe. In contrast to the WR command, the length of the data is
+        not the length of the payload, but the number of bytes to read.
         """
         return self._query("RD", i2c_address, command, length=bytes_to_read)
 
@@ -191,11 +197,8 @@ class _BumbleBee(_PMKProbe, metaclass=ABCMeta):
         {"no overload": 0, "positive overload": 1, "negative overload": 2, "main overload": 4})
     _legacy_model_name = "BumbleBee"
 
-    def __init__(self, power_supply: _PMKPowerSupply, channel: Channel, verbose: bool = False):
-        super().__init__(power_supply, channel, verbose)
-
     def _read_float(self, setting_address: int):
-        return _bytes_to_decimal(self.properties.scaling_factor, self._setting_read(setting_address, 2))
+        return _bytes_to_decimal(self.properties.scaling_factor, self._setting_read_raw(setting_address, 2))
 
     def _write_float(self, value, setting_address, executing_command_address):
         self._setting_write(setting_address, _decimal_to_byte(self.properties.scaling_factor, value, 2))
@@ -274,7 +277,7 @@ class _BumbleBee(_PMKProbe, metaclass=ABCMeta):
         :getter: Returns the current attenuation setting.
         :setter: Sets the attenuation setting.
         """
-        return self.properties.attenuation_ratios.get_user_value(int.from_bytes(self._setting_read(0x0131, 1)))
+        return self.properties.attenuation_ratios.get_user_value(self._setting_read_int(0x0131, 1))
 
     @attenuation.setter
     def attenuation(self, value) -> None:
@@ -292,7 +295,7 @@ class _BumbleBee(_PMKProbe, metaclass=ABCMeta):
         :getter: Returns the current LED color.
         :setter: Sets the LED color.
         """
-        return self._led_colors.get_user_value(int.from_bytes(self._setting_read(0x012C, 1)))
+        return self._led_colors.get_user_value(self._setting_read_int(0x012C, 1))
 
     @led_color.setter
     def led_color(self, value: Literal["red", "green", "blue", "magenta", "cyan", "yellow", "white", "black"]):
@@ -304,34 +307,34 @@ class _BumbleBee(_PMKProbe, metaclass=ABCMeta):
         self._executing_command(0x0305)
 
     @property
-    def overload_positive_counter(self):
+    def overload_positive_counter(self) -> int:
         """
         Returns the number of times the probe has been overloaded in the positive direction since the last call of
         :py:meth:`~clear_overload_counters`.
 
         :return: The number of times the probe has been overloaded on the positive path.
         """
-        return int.from_bytes(self._setting_read(0x013B, 2))
+        return self._setting_read_int(0x013B, 2)
 
     @property
-    def overload_negative_counter(self):
+    def overload_negative_counter(self) -> int:
         """
         Returns the number of times the probe has been overloaded in the negative direction since the last call of
         :py:meth:`~clear_overload_counters`.
 
         :return: The number of times the probe has been overloaded on the negative path.
         """
-        return int.from_bytes(self._setting_read(0x013D, 2))
+        return self._setting_read_int(0x013D, 2)
 
     @property
-    def overload_main_counter(self):
+    def overload_main_counter(self) -> int:
         """
         Returns the number of times the probe has been overloaded in the main path since the last call of
         :py:meth:`~clear_overload_counters`.
 
         :return: The number of times the probe has been overloaded on the main path.
         """
-        return int.from_bytes(self._setting_read(0x013F, 2))
+        return self._setting_read_int(0x013F, 2)
 
     # All the following methods represent keys on the BumbleBee keyboard
 
@@ -556,12 +559,12 @@ class FireFly(_PMKProbe):
 
     class ProbeStates(Enum):
         """ Enumeration of the possible states of the FireFly probe indicated by the Probe Status LED."""
-        NotPowered = b'\x00'
-        ProbeHeadOff = b'\x01'
-        WarmingUp = b'\x02'
-        ReadyToUse = b'\x03'
-        EmptyOrNoBattery = b'\x04'
-        Error = b'\x05'
+        NOT_POWERED = b'\x00'
+        PROBE_HEAD_OFF = b'\x01'
+        WARMING_UP = b'\x02'
+        READY_TO_USE = b'\x03'
+        EMPTY_OR_NO_BATTERY = b'\x04'
+        ERROR = b'\x05'
 
     _i2c_addresses: dict[str, int] = {"unified": 0x04, "metadata": 0x04}  # BumbleBee only has one I2C address
     _addressing: str = "W"
@@ -587,17 +590,18 @@ class FireFly(_PMKProbe):
     @property
     def probe_status_led(self):
         """Returns the state of the probe status LED."""
-        return self.ProbeStates(self._setting_read(0x080B, 1))
+        return self.ProbeStates(self._setting_read_raw(0x080B, 1))
 
     def _battery_adc(self) -> int:
         """Read the battery voltage from the probe head's ADC."""
-        return int.from_bytes(self._setting_read(0x0800, 4), byteorder="big", signed=False)
+        return self._setting_read_int(0x0800, 4, signed=False)
 
     @property
     def battery_voltage(self) -> float:
         """Return the current battery voltage in V.
 
-        Caution: This value is not available immediately after turning off the probe head. It takes approximately 200 milliseconds to become available. Before that the battery voltage will read as 0.0."""
+        Caution: This value is not available immediately after turning off the probe head. It takes approximately 200
+        milliseconds to become available. Before that the battery voltage will read as 0.0."""
         return 2.47 / 4096 / 0.549 * self._battery_adc()
 
     @property
@@ -606,13 +610,13 @@ class FireFly(_PMKProbe):
 
         The tuple contains the states of the four physical LEDs from bottom to top."""
         levels = {
-            2322: (LED.Off, LED.Off, LED.Off, LED.Off),
-            2777: (LED.BlinkingRed, LED.Off, LED.Off, LED.Off),
-            3141: (LED.Yellow, LED.Off, LED.Off, LED.Off),
-            3323: (LED.Green, LED.Off, LED.Off, LED.Off),
-            3505: (LED.Green, LED.Green, LED.Off, LED.Off),
-            3596: (LED.Green, LED.Green, LED.Green, LED.Off),
-            4096: (LED.Green, LED.Green, LED.Green, LED.Green)
+            2322: (LED.OFF, LED.OFF, LED.OFF, LED.OFF),
+            2777: (LED.BLINKING_RED, LED.OFF, LED.OFF, LED.OFF),
+            3141: (LED.YELLOW, LED.OFF, LED.OFF, LED.OFF),
+            3323: (LED.GREEN, LED.OFF, LED.OFF, LED.OFF),
+            3505: (LED.GREEN, LED.GREEN, LED.OFF, LED.OFF),
+            3596: (LED.GREEN, LED.GREEN, LED.GREEN, LED.OFF),
+            4096: (LED.GREEN, LED.GREEN, LED.GREEN, LED.GREEN)
         }
         if not self.probe_head_on:
             return levels[2322]  # if the probe head is off, the battery indicator is off
@@ -628,9 +632,8 @@ class FireFly(_PMKProbe):
         Attribute that determines whether the probe head is on or off.
 
         :getter: Returns the current state of the probe head.
-        :setter: Sets the state of the probe head and waits until the attribute change is reflected when reading its state from the probe head. If the probe head is already in the desired state, no action is taken.
-        """
-        return self._probe_head_on.get_user_value(int.from_bytes(self._setting_read(0x090A, 1)))
+        :setter: Sets the state of the probe head and waits until the attribute change is confirmed by the probe."""
+        return self._probe_head_on.get_user_value(self._setting_read_int(0x090A, 1))
 
     @probe_head_on.setter
     def probe_head_on(self, value: bool):
