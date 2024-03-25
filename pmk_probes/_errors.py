@@ -18,4 +18,4 @@ class ProbeReadError(ProbeError):
     pass
 
 
-ProbeInitializationError = (ProbeTypeError, AttributeError, ValueError)
+ProbeInitializationError = (AttributeError, ValueError)

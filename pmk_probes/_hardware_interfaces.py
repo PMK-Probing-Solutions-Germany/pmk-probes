@@ -93,22 +93,21 @@ def _scan_serial_ports() -> list[PSConnectionInformation]:
     return power_supplies
 
 def _find_power_supplies() -> list[PSConnectionInformation]:
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-    sock.bind((socket.gethostbyname(socket.gethostname()), 30718))
-    sock.settimeout(1)
-    sock.sendto(b'\x00\x00\x00\xf6', ('<broadcast>', 30718))
-    ps_ips = []
-    # Receive response
-    while True:
-        try:
-            data, addr = sock.recvfrom(1024)
-            if data.startswith(b'\x00\x00\x00\xf7'):
-                ps_ips.append(addr[0])
-        except socket.timeout:
-            break
-    sock.close()
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP) as sock:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        sock.bind((socket.gethostbyname(socket.gethostname()), 30718))
+        sock.settimeout(1)
+        sock.sendto(b'\x00\x00\x00\xf6', ('<broadcast>', 30718))
+        ps_ips = []
+        # Receive response
+        while True:
+            try:
+                data, addr = sock.recvfrom(1024)
+                if data.startswith(b'\x00\x00\x00\xf7'):
+                    ps_ips.append(addr[0])
+            except socket.timeout:
+                break
     full_info_list = []
     # read XML metadata from the power supplies' IP addresses by creating an HTTP request
     for ip in ps_ips:
@@ -124,4 +123,4 @@ def _find_power_supplies() -> list[PSConnectionInformation]:
     return full_info_list
 
 if __name__ == "__main__":
-    print(_scan_serial_ports())
+    print(_find_power_supplies())

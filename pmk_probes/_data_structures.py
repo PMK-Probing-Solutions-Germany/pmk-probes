@@ -5,13 +5,18 @@ import datetime
 from enum import Enum, auto
 from typing import ClassVar, Any, Union, NamedTuple, TypeVar
 
+from pmk_probes._bijection import Bijection
+
 DATE_FORMAT = "%Y%m%d"
+
+
 
 # dictionary of UUIDs and their corresponding probe models
 # the key has to be the class name of the probe and the value is the UUID of the probe
-UUIDs = {
+UUIDs = Bijection({
     "BumbleBee2kV": "886-102-504",
     "BumbleBee400V": "886-122-504",
+    "BumbleBee200V": "886-112-504",
     "HSDP4010": "88T-400-008",
     "HSDP2010": "88T-200-003",
     "HSDP2010L": "88T-200-004",
@@ -19,8 +24,7 @@ UUIDs = {
     "HSDP2025L": "88T-200-006",
     "HSDP2050": "88T-200-007",
     "FireFly": "886-102-505"
-}
-
+})
 
 def _batched_string(string: bytes, batch_size: int):
     """Return a generator that yields batches of size batch_size of the string."""
@@ -81,8 +85,8 @@ class PMKMetadata:
     manufacturer: str
     model: str
     description: str
-    production_date: datetime.datetime
-    calibration_due_date: datetime.datetime
+    production_date: datetime.date
+    calibration_due_date: datetime.date
     calibration_instance: str
     hardware_revision: str
     software_revision: str
@@ -91,7 +95,7 @@ class PMKMetadata:
     num_pages: ClassVar[int] = 16
 
     def __post_init__(self):
-        if self.uuid not in UUIDs.values():
+        if self.uuid not in UUIDs.right:
             self.uuid = ""
 
     def __eq__(self, other):
@@ -120,7 +124,7 @@ class PMKMetadata:
         match field_value, field.type:
             case "", _:
                 return None
-            case _, datetime.datetime:
+            case _, datetime.date:
                 try:
                     return datetime.datetime.strptime(field_value, DATE_FORMAT)
                 except ValueError:
@@ -144,7 +148,7 @@ class PMKMetadata:
         match field_value, field.type:
             case None, _:
                 return b''  # append nothing to the metadata
-            case _, datetime.datetime:
+            case _, datetime.date:
                 return field_value.strftime(DATE_FORMAT)
             case _, _:
                 return field_value

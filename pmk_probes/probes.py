@@ -2,6 +2,7 @@
 supplies"""
 
 import logging
+import math
 import time
 import typing
 from abc import ABCMeta, abstractmethod
@@ -23,6 +24,7 @@ def _bytes_to_decimal(scale: float, byte_pair: bytes) -> float:
     return int.from_bytes(byte_pair, byteorder="big", signed=True) / scale
 
 
+
 def _decimal_to_byte(scale: float, decimal: float, length: int) -> bytes:
     integer = int(decimal * scale)
     return integer.to_bytes(signed=True, byteorder="big", length=length)
@@ -31,23 +33,36 @@ def _decimal_to_byte(scale: float, decimal: float, length: int) -> bytes:
 class _PMKProbe(PMKDevice, metaclass=ABCMeta):
     _legacy_model_name = None  # model name of the probe in legacy mode
 
-    def __init__(self, power_supply: _PMKPowerSupply, channel: Channel, verbose: bool = False):
+    def __init__(self, power_supply: _PMKPowerSupply, channel: Channel, verbose: bool = False, allow_legacy: bool = False):
         super().__init__(channel, verbose=verbose)
         self.probe_model = self.__class__.__name__
+        self._validate_probe(power_supply, channel, allow_legacy)
+
+    def _validate_probe(self, power_supply, channel, allow_legacy):
         if self.__class__ not in power_supply.supported_probe_types:
             raise ValueError(f"Probe {self.probe_model} is not supported by this power supply.")
         if channel.value >= power_supply._num_channels + 1:
-            raise ValueError(
-                f"Channel {channel.name} is not available on power supply {self.probe_model}.")
+            raise ValueError(f"Channel {channel.name} is not available on power supply {self.probe_model}.")
         self.power_supply = power_supply
         self.channel = channel
+        self._check_uuid(allow_legacy)
+
+    def _check_uuid(self, allow_legacy):
         try:
-            self._init_using(self.metadata.uuid, self._uuid)
+            read_uuid = self.metadata.uuid
         except ProbeInitializationError:
-            try:
-                self._init_using(self.metadata.model, self._legacy_model_name)
-            except ProbeInitializationError:
-                logging.warning(f"Probe is not supported by this power supply.")
+            read_uuid = None
+        uuids_match = read_uuid == self._uuid
+        legacy_names_match = self.metadata.model == self._legacy_model_name
+        if not uuids_match and not (legacy_names_match and allow_legacy):
+            if read_uuid is not "":
+                raise ProbeTypeError(f"Probe is of type {UUIDs.right.get(read_uuid)}, not {self.probe_model}.")
+            else:
+                raise ProbeTypeError(
+                    f"Could not read probe's UUID, use allow_legacy=True if you are sure it is a {self.probe_model}.")
+
+
+
 
     @property
     @abstractmethod
@@ -56,20 +71,17 @@ class _PMKProbe(PMKDevice, metaclass=ABCMeta):
         the probe's flash."""
         raise NotImplementedError
 
-    def _init_using(self, metadata_value, expected_value):
-        if metadata_value != expected_value:
-            raise ProbeTypeError(f"Probe {self.metadata.model} is not supported by this power supply.")
-        else:
-            pass
+    @staticmethod
+    def _init_using(metadata_value, expected_value) -> bool:
+        return metadata_value == expected_value
 
     @property
     def _interface(self):
-        # TODO: maybe check the type of power supply here and then confirm the addressed plug number isn't too high, e.g. 3 for a 2-channel power supply
         return self.power_supply.interface
 
     @property
     def _uuid(self):
-        uuid = UUIDs.get(self.probe_model)
+        uuid = UUIDs.left.get(self.probe_model)
         if uuid is not None:
             return uuid
         else:
@@ -117,7 +129,16 @@ class _BumbleBee(_PMKProbe, metaclass=ABCMeta):
         return _bytes_to_decimal(self.properties.scaling_factor, self._setting_read_raw(setting_address, 2))
 
     def _write_float(self, value, setting_address, executing_command_address):
-        self._setting_write(setting_address, _decimal_to_byte(self.properties.scaling_factor, value, 2))
+        def min_max_signed_int(n):
+            val = 2 ** (n * 8 - 1)
+            return math.ceil(-val / self.properties.scaling_factor), (val - 1) // self.properties.scaling_factor
+        try:
+            byte = _decimal_to_byte(self.properties.scaling_factor, value, 2)
+            self._setting_write(setting_address, byte)
+            print(f"Writing {byte} to setting address {setting_address}.")
+        except OverflowError as e:
+            raise ValueError(f"Value {value} is out of range for this setting. Value must be in range"
+                             f" {min_max_signed_int(2)}.") from e
         self._executing_command(executing_command_address)
 
     def _executing_command(self, command: int):
@@ -135,6 +156,7 @@ class _BumbleBee(_PMKProbe, metaclass=ABCMeta):
 
     @global_offset.setter
     def global_offset(self, value: float):
+        print(f"Writing {value} to global offset")
         self._write_float(value, 0x0133, 0x0605)
 
     @property
@@ -218,7 +240,8 @@ class _BumbleBee(_PMKProbe, metaclass=ABCMeta):
 
         if value not in self._led_colors:
             raise ValueError(
-                f"LED color {value} is not supported by this probe. List of available colors: {list(self._led_colors.keys())}.")
+                f"LED color {value} is not supported by this probe. List of available colors: "
+                f"{list(self._led_colors.keys())}.")
         self._setting_write(0x012C, _unsigned_to_bytes(self._led_colors.get_integer_value(value), 1))
         self._executing_command(0x0305)
 

@@ -5,7 +5,8 @@ from math import floor, isclose
 import numpy as np
 import pytest
 
-from pmk_probes.probes import BumbleBee2kV, HSDP2010, HSDP2050, FireFly, BumbleBee400V, Hornet4kV, LED
+from pmk_probes.probes import BumbleBee2kV, HSDP2010, HSDP2050, FireFly, BumbleBee400V, Hornet4kV, LED, BumbleBee200V, \
+    _BumbleBee
 from pmk_probes.power_supplies import PS03, Channel
 from tests.config import *
 
@@ -13,7 +14,6 @@ from tests.config import *
 def round_down(n, decimals=0):
     multiplier = 10 ** decimals
     return floor(n * multiplier) / multiplier
-
 
 @pytest.fixture()
 def ps():
@@ -24,8 +24,10 @@ def ps():
 
 @pytest.fixture()
 def bumblebee(ps):
-    yield BumbleBee2kV(ps, test_bumblebee_channel, verbose=True)
-
+    bb1 = BumbleBee2kV(ps, test_bumblebee_channel, verbose=True, allow_legacy=True)
+    bb1.factory_reset()
+    time.sleep(3)  # needs 3 seconds to reset
+    yield bb1
 
 @pytest.fixture()
 def hsdp1(ps):
@@ -56,19 +58,14 @@ class TestBumbleBee:
                 bumblebee.global_offset = ratios_
                 assert isclose(bumblebee.global_offset, ratios_, rel_tol=0.01)
 
-            bumblebee.global_offset = 0  # return to 0
-
-    def test_offset_step_small(self, bumblebee):
-        bumblebee.offset_step_small = 0.125
-        assert bumblebee.offset_step_small == 0.125
-
-    def test_offset_step_large(self, bumblebee):
-        bumblebee.offset_step_large = 2
-        assert bumblebee.offset_step_large == 2
-
-    def test_offset_step_extra_large(self, bumblebee):
-        bumblebee.offset_step_extra_large = 200
-        assert bumblebee.offset_step_extra_large == 200
+    @pytest.mark.parametrize(
+        "offset_step_attribute,value",
+        [("offset_step_small", 0.125),
+         ("offset_step_large", 2),
+         ("offset_step_extra_large", 200)])
+    def test_offset_step(self, bumblebee, offset_step_attribute, value):
+        setattr(bumblebee, offset_step_attribute, value)
+        assert getattr(bumblebee, offset_step_attribute) == value
 
     def test_attenuation(self, bumblebee):
         for attenuation in bumblebee.properties.attenuation_ratios:
@@ -90,8 +87,6 @@ class TestBumbleBee:
 
     def test_overload_main_counter(self, bumblebee):
         # shift offset to limit so overload is triggered
-        bumblebee.attenuation = 500
-        bumblebee.global_offset = 0
         bumblebee.clear_overload_counters()
         assert bumblebee.overload_main_counter == 0
 
@@ -111,22 +106,19 @@ class TestBumbleBee:
         assert bumblebee.led_color == "yellow"
         assert bumblebee.overload_main_counter == 0
 
-    @staticmethod
-    def attenuation_step_test(bumblebee, step_function, amount):
+    @pytest.mark.parametrize(
+        "step_function_name,amount",
+        [("increase_attenuation", 4),
+         ("decrease_attenuation", -4)])
+    def test_attenuation_step(self, bumblebee, step_function_name, amount):
         """Test the attenuation step functions. The idea is that we start from a known attenuation and then step
          amount times and check if the attenuation is correct."""
         for start_attenuation in bumblebee.properties.attenuation_ratios:
             bumblebee.attenuation = start_attenuation
             for _ in range(abs(amount)):
+                step_function = getattr(bumblebee, step_function_name)
                 step_function()
             assert bumblebee.attenuation == bumblebee.properties.attenuation_ratios.shift(amount, start_attenuation)
-            bumblebee.attenuation = 500
-
-    def test_increase_attenuation(self, bumblebee):
-        self.attenuation_step_test(bumblebee, bumblebee.increase_attenuation, 4)
-
-    def test_decrease_attenuation(self, bumblebee):
-        self.attenuation_step_test(bumblebee, bumblebee.decrease_attenuation, -4)
 
     @staticmethod
     def offset_step_test(bumblebee, step_function, step_size):
@@ -138,8 +130,8 @@ class TestBumbleBee:
             bumblebee.global_offset = 0
             for _ in range(steps):
                 step_function()
+            print(bumblebee.global_offset, steps * step_size, bumblebee.global_offset == steps * step_size)
             assert bumblebee.global_offset == steps * step_size
-        bumblebee.global_offset = 0
 
     def test_increase_offset_small(self, bumblebee):
         self.offset_step_test(bumblebee, bumblebee.increase_offset_small, bumblebee.offset_step_small)
@@ -148,12 +140,15 @@ class TestBumbleBee:
         self.offset_step_test(bumblebee, bumblebee.decrease_offset_small, -bumblebee.offset_step_small)
 
     def test_increase_offset_large(self, bumblebee):
+        bumblebee.offset_step_large = -2
         self.offset_step_test(bumblebee, bumblebee.increase_offset_large, bumblebee.offset_step_large)
 
     def test_decrease_offset_large(self, bumblebee):
         self.offset_step_test(bumblebee, bumblebee.decrease_offset_large, -bumblebee.offset_step_large)
 
     def test_increase_offset_extra_large(self, bumblebee):
+        print(bumblebee.offset_step_extra_large)
+        bumblebee.offset_step_extra_large = -7
         self.offset_step_test(bumblebee, bumblebee.increase_offset_extra_large, bumblebee.offset_step_extra_large)
 
     def test_decrease_offset_extra_large(self, bumblebee):
@@ -230,10 +225,3 @@ class TestFireFly:
         on_voltage = firefly.battery_voltage
         assert on_voltage < off_voltage  # battery voltage should drop when probe head is on
         print(f"Off voltage: {off_voltage} V, On voltage: {on_voltage} V")
-
-
-def run_all_tests():
-    pytest.main([__file__])
-
-if __name__ == "__main__":
-    pytest.main([__file__])
