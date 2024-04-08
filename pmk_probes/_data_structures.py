@@ -14,6 +14,7 @@ DATE_FORMAT = "%Y%m%d"
 # dictionary of UUIDs and their corresponding probe models
 # the key has to be the class name of the probe and the value is the UUID of the probe
 UUIDs = Bijection({
+    "Hornet4kV": "886-142-504",
     "BumbleBee2kV": "886-102-504",
     "BumbleBee400V": "886-122-504",
     "BumbleBee200V": "886-112-504",
