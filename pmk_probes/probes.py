@@ -10,11 +10,10 @@ from enum import Enum
 from functools import lru_cache
 from typing import Literal
 
-from ._hardware_interfaces import PSConnectionInformationLAN, PSConnectionInformationUSB
 from .power_supplies import _PMKPowerSupply
-from ._data_structures import PMKMetadata, UUIDs, UserMapping, FireFlyMetadata, PMKProbeProperties, LED
+from ._data_structures import UUIDs, UserMapping, FireFlyMetadata, PMKProbeProperties, LED
 from ._devices import PMKDevice, Channel, DUMMY
-from ._errors import ProbeTypeError, ProbeReadError, ProbeConnectionError, ProbeInitializationError
+from ._errors import ProbeTypeError, UUIDReadError
 
 
 def _unsigned_to_bytes(command: int, length: int) -> bytes:
@@ -25,7 +24,6 @@ def _bytes_to_decimal(scale: float, byte_pair: bytes) -> float:
     return int.from_bytes(byte_pair, byteorder="big", signed=True) / scale
 
 
-
 def _decimal_to_byte(scale: float, decimal: float, length: int) -> bytes:
     integer = int(decimal * scale)
     return integer.to_bytes(signed=True, byteorder="big", length=length)
@@ -34,42 +32,28 @@ def _decimal_to_byte(scale: float, decimal: float, length: int) -> bytes:
 class _PMKProbe(PMKDevice, metaclass=ABCMeta):
     _legacy_model_name = None  # model name of the probe in legacy mode
 
-    def __init__(self, power_supply: _PMKPowerSupply, channel: Channel, verbose: bool = False, allow_legacy: bool = False):
+    def __init__(self, power_supply: _PMKPowerSupply, channel: Channel, verbose: bool = False,
+                 allow_legacy: bool = False):
         super().__init__(channel, verbose=verbose)
         self.probe_model = self.__class__.__name__
+        self.power_supply = power_supply
+        self.channel = channel
         self._validate_probe(power_supply, channel, allow_legacy)
 
-    @classmethod
-    def from_ps_connection_info(cls, ps_conn_info: PSConnectionInformationLAN | PSConnectionInformationUSB,
-                                *args, **kwargs):
-        """
-
-        :param ps_conn_info:
-        :param args:
-        :param kwargs:
-        :return:
-        """
-        if isinstance(ps_conn_info, PSConnectionInformationUSB):
-            return cls(ps_conn_info.com_port, *args, **kwargs)
-        elif isinstance(ps_conn_info, PSConnectionInformationLAN):
-            return cls(ps_conn_info.ip_address, *args, **kwargs)
-        else:
-            raise ValueError("Invalid connection information.")
-
+    def __repr__(self):
+        return f"{self.probe_model} at {self.channel.name} of {repr(self.power_supply)}"
 
     def _validate_probe(self, power_supply, channel, allow_legacy):
         if self.__class__ not in power_supply.supported_probe_types:
             raise ValueError(f"Probe {self.probe_model} is not supported by this power supply.")
         if channel.value >= power_supply._num_channels + 1:
             raise ValueError(f"Channel {channel.name} is not available on power supply {self.probe_model}.")
-        self.power_supply = power_supply
-        self.channel = channel
         self._check_uuid(allow_legacy)
 
     def _check_uuid(self, allow_legacy):
         try:
             read_uuid = self.metadata.uuid
-        except ProbeInitializationError:
+        except UUIDReadError:
             read_uuid = None
         uuids_match = read_uuid == self._uuid
         legacy_names_match = self.metadata.model == self._legacy_model_name
@@ -79,9 +63,6 @@ class _PMKProbe(PMKDevice, metaclass=ABCMeta):
             else:
                 raise ProbeTypeError(
                     f"Could not read probe's UUID, use allow_legacy=True if you are sure it is a {self.probe_model}.")
-
-
-
 
     @property
     @abstractmethod
@@ -151,6 +132,7 @@ class _BumbleBee(_PMKProbe, metaclass=ABCMeta):
         def min_max_signed_int(n):
             val = 2 ** (n * 8 - 1)
             return math.ceil(-val / self.properties.scaling_factor), (val - 1) // self.properties.scaling_factor
+
         try:
             byte = _decimal_to_byte(self.properties.scaling_factor, value, 2)
             self._setting_write(setting_address, byte)

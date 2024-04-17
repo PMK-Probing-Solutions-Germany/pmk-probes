@@ -1,10 +1,15 @@
 """This module contains the classes for the PMK power supplies."""
+import http.client
+import re
+import socket
+import time
 
-from ._data_structures import PMKMetadata
+import serial
+import serial.tools.list_ports
+
 from ._devices import PMKDevice, Channel
 from ._errors import ProbeReadError
-from ._hardware_interfaces import LANInterface, USBInterface, _find_power_supplies, PSConnectionInformationUSB, \
-    PSConnectionInformationLAN
+from ._hardware_interfaces import LANInterface, USBInterface
 
 
 class _PMKPowerSupply(PMKDevice):
@@ -29,6 +34,14 @@ class _PMKPowerSupply(PMKDevice):
                 raise ValueError("Either com_port or ip_address must be specified.")
             case _:
                 raise ValueError("Only one of com_port or ip_address can be specified.")
+
+    def __repr__(self):
+        if isinstance(self.interface, USBInterface):
+            connection_info_name = "com_port"
+        else:
+            connection_info_name = "ip_address"
+        return (f"{self.__class__.__name__}(serial_number={self.metadata.serial_number}, "
+                f"{connection_info_name}={self.interface.connection_info})")
 
     @property
     def _interface(self):
@@ -82,9 +95,60 @@ class PS03(_PMKPowerSupply):
     _num_channels = 4  # the PS03 has 4 channels
 
 
-def find_power_supplies() -> dict[str, list[PSConnectionInformationLAN | PSConnectionInformationUSB]]:
-    """
-    Finds all connected power supplies in your network.
+def get_closed_ps_with_metadata(model=None, **connection_info) -> _PMKPowerSupply:
+    if not model:
+        ps = PS03(**connection_info)  # works for detecting both PS02 and PS03
+        model = ps.metadata.model
+        ps.close()
+    if model == "PS-02":
+        ps = PS02(**connection_info)
+    elif model == "PS-03":
+        ps = PS03(**connection_info)
+    else:
+        raise ValueError(f"Unknown model: {model}")
+    return ps
 
-    """
-    return _find_power_supplies()
+def _find_power_supplies_usb() -> list[_PMKPowerSupply]:
+    devices = serial.tools.list_ports.comports()
+    power_supplies = []
+    for device in devices:
+        match device.vid, device.pid:
+            case 1027, 24577:
+                power_supplies.append(get_closed_ps_with_metadata(com_port=device.device))
+            case _:
+                pass
+    return power_supplies
+
+def _find_power_supplies_lan() -> list[_PMKPowerSupply]:
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP) as sock:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        sock.bind((socket.gethostbyname(socket.gethostname()), 30718))
+        sock.settimeout(1)
+        sock.sendto(b'\x00\x00\x00\xf6', ('<broadcast>', 30718))
+        ps_ips = []
+        # Receive response
+        while True:
+            try:
+                data, addr = sock.recvfrom(1024)
+                if data.startswith(b'\x00\x00\x00\xf7'):
+                    ps_ips.append(addr[0])
+            except socket.timeout:
+                break
+    full_info_list = []
+    # read XML metadata from the power supplies' IP addresses by creating an HTTP request
+    for ip in ps_ips:
+        try:
+            conn = http.client.HTTPConnection(ip)
+            conn.request("GET", "/PowerSupplyMetadata.xml")
+            text = conn.getresponse().read().decode()
+            patterns = {"model": r"<Model>([\w-]{5})</Model>", "serial_number": r"<SerialNumber>(\d{4})</SerialNumber>"}
+            metadata = {key: re.search(pattern, text).group(1) for key, pattern in patterns.items()}
+            full_info_list.append(get_closed_ps_with_metadata(metadata["model"], ip_address=ip))
+        except (OSError, AttributeError):
+            pass
+    return full_info_list
+
+
+def find_power_supplies() -> dict[str, list[_PMKPowerSupply]]:
+    return {'usb': _find_power_supplies_usb(), 'lan': _find_power_supplies_lan()}

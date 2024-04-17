@@ -193,23 +193,22 @@ class FireFlyMetadata(PMKMetadata):
         "uuid": (0xAD, 11),
         "propagation_delay": (0xC1, 4)
     }
+    metadata_maps = {
+        b"1.1": metadata_map_v11,
+        b"1.2": metadata_map_v12
+    }
 
     @classmethod
     def from_bytes(cls, metadata: bytes) -> Union["FireFlyMetadata", None]:
         # TODO: this is very similar to the method in PMKMetadata, maybe refactor
-        match metadata[0x04:0x07]:
-            case b"1.1":
-                metadata_map = cls.metadata_map_v11
-            case b"1.2":
-                metadata_map = cls.metadata_map_v12
-            case _:
-                raise ProbeReadError("Unknown EEPROM layout revision.")
+        layout_revision = metadata[0x03:0x07]  # layout revision is stored at 0x04-0x06
+        metadata_map = cls.metadata_maps[layout_revision]
         values = {}
         for field in fields(cls):
             address, length = metadata_map[field.name]
             try:
                 field_value = metadata[address:address + length].decode("utf-8")
-            except UnicodeDecodeError as e:
+            except Exception as e:
                 raise ProbeReadError(f"Could not decode metadata field {field.name}.") from e
             try:
                 values[field.name] = cls._parse_field(field, field_value)

@@ -69,10 +69,9 @@ class PMKDevice:
         """
         try:
             return self._read_metadata()
-        except ProbeReadError as exc:
-            raise ProbeConnectionError(f"Could not read metadata from {self.__class__.__name__} at "
-                                       f"{self._interface.connection_info}.")\
-                from exc
+        except Exception as e:
+            raise ProbeConnectionError(f"Could not read metadata from {repr(self)}.")\
+                from e
 
     def _expect(self, expected: list[bytes]) -> None:
         """

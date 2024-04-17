@@ -18,4 +18,4 @@ class ProbeReadError(ProbeError):
     pass
 
 
-ProbeInitializationError = (AttributeError, ValueError)
+UUIDReadError = (AttributeError, ValueError)

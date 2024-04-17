@@ -1,8 +1,6 @@
-import http.client
-import re
 import socket
 import time
-from abc import ABCMeta
+from abc import ABCMeta, abstractmethod
 from collections import namedtuple
 
 import serial
@@ -14,21 +12,41 @@ from pmk_probes._errors import ProbeConnectionError
 class HardwareInterface(metaclass=ABCMeta):
 
     def __init__(self, connection_info: str):
-        self.connection_info = connection_info
+        self.connection_info = connection_info  # ip_address/com_port depending on the interface
 
-    def write(self, data: bytes):
+    def __repr__(self):
+        return f"{self.connection_info}"
+
+    def write(self, data: bytes) -> None:
+        self._ensure_connection()
+        self._write(data)
+
+    def _write(self, data: bytes):
         raise NotImplementedError
 
     def read(self, length: int) -> bytes:
-        raise NotImplementedError
+        self._ensure_connection()
+        return self._read(length)
 
-    def query(self, data: bytes) -> bytes:
+    def _read(self, length: int) -> bytes:
         raise NotImplementedError
 
     def reset_input_buffer(self) -> None:
         raise NotImplementedError
 
+    def open(self) -> None:
+        raise NotImplementedError
+
     def close(self) -> None:
+        raise NotImplementedError
+
+    def _ensure_connection(self) -> None:
+        if not self.is_open:
+            self.open()
+
+    @property
+    @abstractmethod
+    def is_open(self) -> bool:
         raise NotImplementedError
 
 
@@ -36,98 +54,61 @@ class LANInterface(HardwareInterface):
     def __init__(self, ip_address: str):
         super().__init__(ip_address)
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.connect((ip_address, 10001))
+        self._is_open = False  # flag to check if the connection is open, not provided by socket
 
-    def write(self, data: bytes):
+    def _write(self, data: bytes):
         self.sock.send(data)
 
-    def read(self, length: int) -> bytes:
+    def _read(self, length: int) -> bytes:
         time.sleep(0.05)
         return self.sock.recv(length)
 
     def reset_input_buffer(self) -> None:
         pass
 
+    def open(self) -> None:
+        self.sock.connect((self.connection_info, 10001))
+        self._is_open = True
+
     def close(self) -> None:
         self.sock.close()
+        self._is_open = False
+
+    @property
+    def is_open(self) -> bool:
+        return self._is_open
 
 
 class USBInterface(HardwareInterface):
 
     def __init__(self, com_port: str):
         super().__init__(com_port)
-        try:
-            self.ser = serial.Serial(com_port, baudrate=115200, timeout=1, rtscts=False, dsrdtr=False)
-        except serial.SerialException:
-            raise ProbeConnectionError(f"Could not open {com_port}. Is the power supply connected?")
+        self.ser = serial.Serial(baudrate=115200, timeout=1, rtscts=False, dsrdtr=False)
+        self.ser.port = com_port
 
-    def write(self, data: bytes) -> None:
+    def _write(self, data: bytes) -> None:
         self.ser.write(data)
 
-    def read(self, length: int) -> bytes:
+    def _read(self, length: int) -> bytes:
         return self.ser.read(length)
 
     def reset_input_buffer(self) -> None:
+        self._ensure_connection()
         self.ser.reset_input_buffer()
+
+    def open(self):
+        try:
+            self.ser.open()
+        except serial.SerialException:
+            raise ProbeConnectionError(f"Could not open {self.connection_info}. Is the power supply connected?")
 
     def close(self) -> None:
         self.ser.close()
 
-
-PSConnectionInformationLAN = namedtuple("PSConnectionInformationLAN", ["ip_address", "model", "serial_number"])
-PSConnectionInformationUSB = namedtuple("PSConnectionInformationUSB", ["com_port", "model", "serial_number"])
-
-def _find_power_supplies_usb() -> list[PSConnectionInformationUSB]:
-    devices = serial.tools.list_ports.comports()
-    power_supplies = []
-    for device in devices:
-        match device.vid, device.pid:
-            case 1027, 24577:
-                from pmk_probes.power_supplies import PS03
-                ps = PS03(device.device)
-                power_supplies.append(
-                    PSConnectionInformationUSB(device.device, ps.metadata.model, ps.metadata.serial_number))
-                ps.close()
-            case _:
-                pass
-    return power_supplies
-
-def _find_power_supplies_lan() -> list[PSConnectionInformationLAN]:
-    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP) as sock:
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        sock.bind((socket.gethostbyname(socket.gethostname()), 30718))
-        sock.settimeout(1)
-        sock.sendto(b'\x00\x00\x00\xf6', ('<broadcast>', 30718))
-        ps_ips = []
-        # Receive response
-        while True:
-            try:
-                data, addr = sock.recvfrom(1024)
-                if data.startswith(b'\x00\x00\x00\xf7'):
-                    ps_ips.append(addr[0])
-            except socket.timeout:
-                break
-    full_info_list = []
-    # read XML metadata from the power supplies' IP addresses by creating an HTTP request
-    for ip in ps_ips:
-        try:
-            conn = http.client.HTTPConnection(ip)
-            conn.request("GET", "/PowerSupplyMetadata.xml")
-            text = conn.getresponse().read().decode()
-            patterns = {"model": r"<Model>([\w-]{5})</Model>", "serial_number": r"<SerialNumber>(\d{4})</SerialNumber>"}
-            metadata = {key: re.search(pattern, text).group(1) for key, pattern in patterns.items()}
-            full_info_list.append(PSConnectionInformationLAN(ip, **metadata))
-        except OSError:
-            pass
-    return full_info_list
+    @property
+    def is_open(self) -> bool:
+        return self.ser.is_open
 
 
-def _find_power_supplies() -> dict[str, list[PSConnectionInformationLAN | PSConnectionInformationUSB]]:
-    return {'usb': _find_power_supplies_usb(), 'lan': _find_power_supplies_lan()}
-
-if __name__ == "__main__":
-    ans = _find_power_supplies()
-    print(ans)
 
 
