@@ -6,6 +6,7 @@ from enum import Enum, auto
 from typing import ClassVar, Any, Union, NamedTuple, TypeVar
 
 from pmk_probes._bijection import Bijection
+from pmk_probes._errors import ProbeReadError
 
 DATE_FORMAT = "%Y%m%d"
 
@@ -164,8 +165,7 @@ class FireFlyMetadata(PMKMetadata):
     """ FireFly has special metadata because it has at least one more field than all other PMK probes. """
 
     propagation_delay: float
-
-    metadata_map = {
+    metadata_map_v11 = {
         "eeprom_layout_revision": (0x04, 3),
         "serial_number": (0x07, 4),
         "manufacturer": (0x0B, 17),
@@ -179,15 +179,42 @@ class FireFlyMetadata(PMKMetadata):
         "uuid": (0xA7, 11),
         "propagation_delay": (0xBB, 4)
     }
+    metadata_map_v12 = {
+        "eeprom_layout_revision": (0x04, 3),
+        "serial_number": (0x07, 7),
+        "manufacturer": (0x11, 17),
+        "model": (0x31, 7),
+        "description": (0x41, 37),
+        "production_date": (0x67, 8),
+        "calibration_due_date": (0x6F, 8),
+        "calibration_instance": (0x77, 3),
+        "hardware_revision": (0x7B, 22),
+        "software_revision": (0x94, 13),
+        "uuid": (0xAD, 11),
+        "propagation_delay": (0xC1, 4)
+    }
 
     @classmethod
     def from_bytes(cls, metadata: bytes) -> Union["FireFlyMetadata", None]:
         # TODO: this is very similar to the method in PMKMetadata, maybe refactor
+        match metadata[0x04:0x07]:
+            case b"1.1":
+                metadata_map = cls.metadata_map_v11
+            case b"1.2":
+                metadata_map = cls.metadata_map_v12
+            case _:
+                raise ProbeReadError("Unknown EEPROM layout revision.")
         values = {}
         for field in fields(cls):
-            address, length = cls.metadata_map[field.name]
-            field_value = metadata[address:address + length].decode("utf-8")
-            values[field.name] = cls._parse_field(field, field_value)
+            address, length = metadata_map[field.name]
+            try:
+                field_value = metadata[address:address + length].decode("utf-8")
+            except UnicodeDecodeError as e:
+                raise ProbeReadError(f"Could not decode metadata field {field.name}.") from e
+            try:
+                values[field.name] = cls._parse_field(field, field_value)
+            except struct.error:
+                values[field.name] = None
         return cls(**values)
 
 

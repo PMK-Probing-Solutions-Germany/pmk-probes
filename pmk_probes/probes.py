@@ -10,6 +10,7 @@ from enum import Enum
 from functools import lru_cache
 from typing import Literal
 
+from ._hardware_interfaces import PSConnectionInformationLAN, PSConnectionInformationUSB
 from .power_supplies import _PMKPowerSupply
 from ._data_structures import PMKMetadata, UUIDs, UserMapping, FireFlyMetadata, PMKProbeProperties, LED
 from ._devices import PMKDevice, Channel, DUMMY
@@ -38,6 +39,24 @@ class _PMKProbe(PMKDevice, metaclass=ABCMeta):
         self.probe_model = self.__class__.__name__
         self._validate_probe(power_supply, channel, allow_legacy)
 
+    @classmethod
+    def from_ps_connection_info(cls, ps_conn_info: PSConnectionInformationLAN | PSConnectionInformationUSB,
+                                *args, **kwargs):
+        """
+
+        :param ps_conn_info:
+        :param args:
+        :param kwargs:
+        :return:
+        """
+        if isinstance(ps_conn_info, PSConnectionInformationUSB):
+            return cls(ps_conn_info.com_port, *args, **kwargs)
+        elif isinstance(ps_conn_info, PSConnectionInformationLAN):
+            return cls(ps_conn_info.ip_address, *args, **kwargs)
+        else:
+            raise ValueError("Invalid connection information.")
+
+
     def _validate_probe(self, power_supply, channel, allow_legacy):
         if self.__class__ not in power_supply.supported_probe_types:
             raise ValueError(f"Probe {self.probe_model} is not supported by this power supply.")
@@ -55,7 +74,7 @@ class _PMKProbe(PMKDevice, metaclass=ABCMeta):
         uuids_match = read_uuid == self._uuid
         legacy_names_match = self.metadata.model == self._legacy_model_name
         if not uuids_match and not (legacy_names_match and allow_legacy):
-            if read_uuid is not "":
+            if read_uuid != "":
                 raise ProbeTypeError(f"Probe is of type {UUIDs.right.get(read_uuid)}, not {self.probe_model}.")
             else:
                 raise ProbeTypeError(

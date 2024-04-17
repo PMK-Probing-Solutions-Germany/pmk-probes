@@ -74,25 +74,25 @@ class USBInterface(HardwareInterface):
         self.ser.close()
 
 
-PSConnectionInformation = namedtuple("PSConnectionInformation", ["ip_address", "model", "serial_number"])
+PSConnectionInformationLAN = namedtuple("PSConnectionInformationLAN", ["ip_address", "model", "serial_number"])
+PSConnectionInformationUSB = namedtuple("PSConnectionInformationUSB", ["com_port", "model", "serial_number"])
 
-def _scan_serial_ports() -> list[PSConnectionInformation]:
-
+def _find_power_supplies_usb() -> list[PSConnectionInformationUSB]:
     devices = serial.tools.list_ports.comports()
     power_supplies = []
     for device in devices:
         match device.vid, device.pid:
             case 1027, 24577:
-                print("Found PMK power supply at", device.device)
                 from pmk_probes.power_supplies import PS03
-                ps = PS03(device.device, verbose=True)
-                power_supplies.append(PSConnectionInformation(device.device, ps.metadata.model, ps.metadata.serial_number))
+                ps = PS03(device.device)
+                power_supplies.append(
+                    PSConnectionInformationUSB(device.device, ps.metadata.model, ps.metadata.serial_number))
                 ps.close()
             case _:
                 pass
     return power_supplies
 
-def _find_power_supplies() -> list[PSConnectionInformation]:
+def _find_power_supplies_lan() -> list[PSConnectionInformationLAN]:
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP) as sock:
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
@@ -117,10 +117,17 @@ def _find_power_supplies() -> list[PSConnectionInformation]:
             text = conn.getresponse().read().decode()
             patterns = {"model": r"<Model>([\w-]{5})</Model>", "serial_number": r"<SerialNumber>(\d{4})</SerialNumber>"}
             metadata = {key: re.search(pattern, text).group(1) for key, pattern in patterns.items()}
-            full_info_list.append(PSConnectionInformation(ip, **metadata))
+            full_info_list.append(PSConnectionInformationLAN(ip, **metadata))
         except OSError:
             pass
     return full_info_list
 
+
+def _find_power_supplies() -> dict[str, list[PSConnectionInformationLAN | PSConnectionInformationUSB]]:
+    return {'usb': _find_power_supplies_usb(), 'lan': _find_power_supplies_lan()}
+
 if __name__ == "__main__":
-    print(_find_power_supplies())
+    ans = _find_power_supplies()
+    print(ans)
+
+

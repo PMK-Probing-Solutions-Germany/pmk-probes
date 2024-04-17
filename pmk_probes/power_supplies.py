@@ -2,7 +2,9 @@
 
 from ._data_structures import PMKMetadata
 from ._devices import PMKDevice, Channel
-from ._hardware_interfaces import LANInterface, USBInterface, _find_power_supplies, PSConnectionInformation
+from ._errors import ProbeReadError
+from ._hardware_interfaces import LANInterface, USBInterface, _find_power_supplies, PSConnectionInformationUSB, \
+    PSConnectionInformationLAN
 
 
 class _PMKPowerSupply(PMKDevice):
@@ -32,22 +34,24 @@ class _PMKPowerSupply(PMKDevice):
     def _interface(self):
         return self.interface
 
-    # @property
-    # def connected_probes(self):
-    #     """
-    #
-    #     """
-    #     connected_probes = {channel: None for channel in Channel}
-    #     for channel in Channel:
-    #         # for every channel, query the probe for its metadata
-    #         for ProbeType in self.supported_probe_types:
-    #             try:
-    #                 probe_to_try = ProbeType(self, channel)
-    #                 connected_probes[channel] = probe_to_try
-    #                 break
-    #             except ProbeReadError:
-    #                 continue
-    #     return connected_probes
+    @property
+    def connected_probes(self):
+        """
+
+        """
+        from .probes import _BumbleBee, _HSDP, FireFly
+        to_try = [_BumbleBee, _HSDP, FireFly]
+        connected_probes = {channel: None for channel in Channel}
+        for channel in Channel:
+            # for every channel, query the probe for its metadata
+            for ProbeType in to_try:
+                try:
+                    detected_probe = ProbeType(self, channel, allow_legacy=True)
+                    connected_probes[channel] = detected_probe
+                    break
+                except ProbeReadError:
+                    continue
+        return connected_probes
 
     # def device_at_channel(self, channel: Channel) -> PMKDevice:
     #     """
@@ -78,7 +82,7 @@ class PS03(_PMKPowerSupply):
     _num_channels = 4  # the PS03 has 4 channels
 
 
-def find_power_supplies() -> list[PSConnectionInformation]:
+def find_power_supplies() -> dict[str, list[PSConnectionInformationLAN | PSConnectionInformationUSB]]:
     """
     Finds all connected power supplies in your network.
 

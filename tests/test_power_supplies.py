@@ -18,6 +18,10 @@ class TestPMKPowerSupply:
     def test_close(self, ps):
         ps.close()
 
+    def test_connected_probes(self, ps):
+        connected_probes = ps.connected_probes()
+        print(connected_probes)
+
 
 def test_find_power_supplies():
     assert len(find_power_supplies()) > 0
