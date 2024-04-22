@@ -110,7 +110,8 @@ class PMKMetadata:
         values = {}
         try:
             for i, field in enumerate(fields(cls)):
-                field_value = metadata.split(b"\n")[i].decode("utf-8")
+
+                field_value = metadata.split(b"\n")[i]
                 values[field.name] = cls._parse_field(field, field_value)
             return cls(**values)
         except TypeError as exc:
@@ -119,20 +120,20 @@ class PMKMetadata:
             return None
 
     @classmethod
-    def _parse_field(cls, field, field_value: str):
+    def _parse_field(cls, field, field_value: str | bytes):
         # check if type of field is float:
         if field.type == float:
-            return struct.unpack('f', field_value.encode())[0]
-        match field_value, field.type:
+            return struct.unpack('f', field_value)[0]
+        match field_value.decode("utf-8"), field.type:
             case "", _:
                 return None
-            case _, datetime.date:
+            case decoded, datetime.date:
                 try:
-                    return datetime.datetime.strptime(field_value, DATE_FORMAT)
+                    return datetime.datetime.strptime(decoded, DATE_FORMAT)
                 except ValueError:
                     return None
-            case _, _:
-                return field.type(field_value)
+            case decoded, _:
+                return field.type(decoded)
 
     def to_bytes(self):
         values = []
@@ -201,13 +202,13 @@ class FireFlyMetadata(PMKMetadata):
     @classmethod
     def from_bytes(cls, metadata: bytes) -> Union["FireFlyMetadata", None]:
         # TODO: this is very similar to the method in PMKMetadata, maybe refactor
-        layout_revision = metadata[0x03:0x07]  # layout revision is stored at 0x04-0x06
+        layout_revision = metadata[0x04:0x07]  # layout revision is stored at 0x04-0x06
         metadata_map = cls.metadata_maps[layout_revision]
         values = {}
         for field in fields(cls):
             address, length = metadata_map[field.name]
             try:
-                field_value = metadata[address:address + length].decode("utf-8")
+                field_value = metadata[address:address + length]
             except Exception as e:
                 raise ProbeReadError(f"Could not decode metadata field {field.name}.") from e
             try:

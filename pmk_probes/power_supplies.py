@@ -40,8 +40,11 @@ class _PMKPowerSupply(PMKDevice):
             connection_info_name = "com_port"
         else:
             connection_info_name = "ip_address"
-        return (f"{self.__class__.__name__}(serial_number={self.metadata.serial_number}, "
-                f"{connection_info_name}={self.interface.connection_info})")
+        if self._serial_number:
+            sn_part = f"serial_number={self._serial_number}, "
+        else:
+            sn_part = ""
+        return (f"{self.__class__.__name__}({sn_part}{connection_info_name}={self.interface.connection_info})")
 
     @property
     def _interface(self):

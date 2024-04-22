@@ -43,6 +43,7 @@ class PMKDevice:
     def __init__(self, channel: Channel, verbose: bool = False):
         self.channel = channel
         self.verbose = verbose
+        self._serial_number = None
 
 
     @property
@@ -68,9 +69,11 @@ class PMKDevice:
         :getter: Returns the probe's metadata.
         """
         try:
-            return self._read_metadata()
+            metadata = self._read_metadata()
+            self._serial_number = metadata.serial_number
+            return metadata
         except Exception as e:
-            raise ProbeConnectionError(f"Could not read metadata from {repr(self)}.")\
+            raise ProbeConnectionError(f"{e.args[0]} Could not read metadata from {repr(self)}.")\
                 from e
 
     def _expect(self, expected: list[bytes]) -> None:

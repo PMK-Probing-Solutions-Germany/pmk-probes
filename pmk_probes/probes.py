@@ -41,7 +41,7 @@ class _PMKProbe(PMKDevice, metaclass=ABCMeta):
         self._validate_probe(power_supply, channel, allow_legacy)
 
     def __repr__(self):
-        return f"{self.probe_model} at {self.channel.name} of {repr(self.power_supply)}"
+        return f"{self.probe_model} at {self.channel.name} of {self.power_supply}"
 
     def _validate_probe(self, power_supply, channel, allow_legacy):
         if self.__class__ not in power_supply.supported_probe_types:
@@ -157,7 +157,6 @@ class _BumbleBee(_PMKProbe, metaclass=ABCMeta):
 
     @global_offset.setter
     def global_offset(self, value: float):
-        print(f"Writing {value} to global offset")
         self._write_float(value, 0x0133, 0x0605)
 
     @property

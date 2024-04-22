@@ -44,6 +44,7 @@ class TestBumbleBee:
     def test_read_metadata(self, bumblebee):
         metadata = bumblebee.metadata
         print(metadata)
+        metadata.to_bytes()
         assert metadata is not None
 
     def test_print_offset(self, bumblebee):
