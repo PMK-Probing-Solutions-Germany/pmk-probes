@@ -3,18 +3,65 @@ import struct
 from dataclasses import dataclass, fields
 import datetime
 from enum import Enum, auto
-from typing import ClassVar, Any, Union, NamedTuple, TypeVar
+from typing import ClassVar, Any, Union, NamedTuple, TypeVar, TypeAlias
 
-from pmk_probes._bijection import Bijection
 from pmk_probes._errors import ProbeReadError
 
 DATE_FORMAT = "%Y%m%d"
 
 
 
+
+def _batched_string(string: bytes, batch_size: int):
+    """Return a generator that yields batches of size batch_size of the string."""
+    for i in range(0, len(string), batch_size):
+        yield string[i:i + batch_size]
+
+
+class UserMapping:
+    """ Maps between 'end user' display values and internal descriptors. It is defined using a dictionary that maps
+    from user values to descriptors. """
+
+    def __init__(self, user_to_internal: dict[int | str, int | str]):
+        if len(set(user_to_internal.values())) != len(user_to_internal):
+            logging.warning("The mapping is not bijective.")
+        self.user_to_internal = user_to_internal
+
+    @property
+    def internal_to_user(self) -> dict:
+        """
+        Inverts a bijective dictionary.
+
+        Returns:
+            The inverted dictionary.
+        """
+        return {v: k for k, v in self.user_to_internal.items()}
+
+    def get_user_value(self, internal_value: int):
+        return self.internal_to_user[internal_value]
+
+    def get_internal_value(self, user_value: Any) -> int:
+        return self.user_to_internal[user_value]
+
+    def keys(self):
+        """ Returns the user values. """
+        return self.user_to_internal.keys()
+
+    @property
+    def user_values(self):
+        return self.user_to_internal.keys()
+
+    @property
+    def internal_values(self):
+        return self.user_to_internal.values()
+
+    def __iter__(self):
+        return iter(self.user_to_internal)
+
+
 # dictionary of UUIDs and their corresponding probe models
 # the key has to be the class name of the probe and the value is the UUID of the probe
-UUIDs = Bijection({
+UUIDs = UserMapping({
     "Hornet4kV": "886-142-504",
     "BumbleBee2kV": "886-102-504",
     "BumbleBee400V": "886-122-504",
@@ -27,52 +74,6 @@ UUIDs = Bijection({
     "HSDP2050": "88T-200-007",
     "FireFly": "886-102-505"
 })
-
-def _batched_string(string: bytes, batch_size: int):
-    """Return a generator that yields batches of size batch_size of the string."""
-    for i in range(0, len(string), batch_size):
-        yield string[i:i + batch_size]
-
-
-class UserMapping:
-
-    def __init__(self, user_to_integer: dict[Any, int]):
-        self.user_to_integer = user_to_integer
-
-    @property
-    def integer_to_user(self) -> dict:
-        """
-        Inverts a bijective dictionary.
-
-        Returns:
-            The inverted dictionary.
-        """
-        return {v: k for k, v in self.user_to_integer.items()}
-
-    def get_user_value(self, integer: int):
-        return self.integer_to_user[integer]
-
-    def get_integer_value(self, user_value: Any):
-        return self.user_to_integer[user_value]
-
-    def shift(self, shift: int, start: Any):
-        """
-        Returns the user value that is shift steps away from start. E.g. for shift=1 and start="red" the method
-        returns "green".
-        """
-        as_list = list(self.user_to_integer)
-        restricted_index = (as_list.index(start) + shift) % len(as_list)
-        return as_list[restricted_index]
-
-    def keys(self):
-        return self.user_to_integer.keys()
-
-    def values(self):
-        return self.user_to_integer.values()
-
-    def __iter__(self):
-        return iter(self.user_to_integer)
-
 
 class PMKProbeProperties(NamedTuple):
     input_voltage_range: tuple[float, float]  # (lower, upper)
@@ -97,7 +98,7 @@ class PMKMetadata:
     num_pages: ClassVar[int] = 16
 
     def __post_init__(self):
-        if self.uuid not in UUIDs.right:
+        if self.uuid not in UUIDs.internal_values:
             self.uuid = ""
 
     def __eq__(self, other):
@@ -106,18 +107,26 @@ class PMKMetadata:
 
     @classmethod
     def from_bytes(cls, metadata: bytes) -> Union["PMKMetadata", None]:
-        metadata = metadata.replace(b"\xFF", b"").replace(b"?", b"")
         values = {}
-        try:
-            for i, field in enumerate(fields(cls)):
-
-                field_value = metadata.split(b"\n")[i]
+        for i, field in enumerate(fields(cls)):
+            field_value = cls._get_field_value(metadata, i, field.name)
+            try:
                 values[field.name] = cls._parse_field(field, field_value)
-            return cls(**values)
-        except TypeError as exc:
-            logging.warning("Metadata present in the probe could not be parsed.")
-            logging.error(exc)
-            return None
+            except struct.error:
+                values[field.name] = None
+        return cls(**values)
+
+    @classmethod
+    def _get_field_value(cls, metadata: bytes, k: int, field_name: str) -> bytes:
+        """ Get the value of a field from the metadata using the traditional sequential evaluation of fields.
+
+        :param metadata: The metadata as a bytes object.
+        :param k: The index of the field in the metadata.
+        :param field_name: The name of the field.
+        :return: The kth field of the metadata separated by "\n".
+        """
+        metadata_list = metadata.replace(b"\xFF", b"").replace(b"?", b"").split(b"\n")
+        return metadata_list[k]
 
     @classmethod
     def _parse_field(cls, field, field_value: str | bytes):
@@ -194,31 +203,26 @@ class FireFlyMetadata(PMKMetadata):
         "uuid": (0xAD, 11),
         "propagation_delay": (0xC1, 4)
     }
+    # EEPROM layout revision -> metadata map
     metadata_maps = {
         b"1.1": metadata_map_v11,
         b"1.2": metadata_map_v12
     }
 
     @classmethod
-    def from_bytes(cls, metadata: bytes) -> Union["FireFlyMetadata", None]:
-        # TODO: this is very similar to the method in PMKMetadata, maybe refactor
-        layout_revision = metadata[0x04:0x07]  # layout revision is stored at 0x04-0x06
-        metadata_map = cls.metadata_maps[layout_revision]
-        values = {}
-        for field in fields(cls):
-            address, length = metadata_map[field.name]
-            try:
-                field_value = metadata[address:address + length]
-            except Exception as e:
-                raise ProbeReadError(f"Could not decode metadata field {field.name}.") from e
-            try:
-                values[field.name] = cls._parse_field(field, field_value)
-            except struct.error:
-                values[field.name] = None
-        return cls(**values)
+    def _get_field_value(cls, metadata: bytes, k: int, field_name: str) -> bytes:
+        """ Get the value of a field from the metadata.
+        :param metadata: The metadata as a bytes object.
+        :param k: The index of the field in the metadata.
+        :param field_name: The name of the field.
+        :return: The field value of the metadata entry with name field_name.
+        """
+        address, length = cls.metadata_maps[metadata[0x04:0x07]][field_name]  # layout revision is stored at 0x04-0x06
+        return metadata[address:address + length]
 
 
 class LED(Enum):
+    """ Enum for the FireFly LED states."""
     GREEN = auto()
     YELLOW = auto()
     BLINKING_RED = auto()

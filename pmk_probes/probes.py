@@ -1,14 +1,12 @@
 """ This module contains classes for controlling PMK probes. The classes are designed to be used with PMK power
 supplies"""
 
-import logging
 import math
 import time
-import typing
 from abc import ABCMeta, abstractmethod
 from enum import Enum
 from functools import lru_cache
-from typing import Literal
+from typing import Literal, TypeVar, cast
 
 from .power_supplies import _PMKPowerSupply
 from ._data_structures import UUIDs, UserMapping, FireFlyMetadata, PMKProbeProperties, LED
@@ -59,7 +57,7 @@ class _PMKProbe(PMKDevice, metaclass=ABCMeta):
         legacy_names_match = self.metadata.model == self._legacy_model_name
         if not uuids_match and not (legacy_names_match and allow_legacy):
             if read_uuid != "":
-                raise ProbeTypeError(f"Probe is of type {UUIDs.right.get(read_uuid)}, not {self.probe_model}.")
+                raise ProbeTypeError(f"Probe is of type {UUIDs.get_user_value(read_uuid)}, not {self.probe_model}.")
             else:
                 raise ProbeTypeError(
                     f"Could not read probe's UUID, use allow_legacy=True if you are sure it is a {self.probe_model}.")
@@ -76,12 +74,12 @@ class _PMKProbe(PMKDevice, metaclass=ABCMeta):
         return metadata_value == expected_value
 
     @property
-    def _interface(self):
+    def interface(self):
         return self.power_supply.interface
 
     @property
     def _uuid(self):
-        uuid = UUIDs.left.get(self.probe_model)
+        uuid = UUIDs.get_internal_value(self.probe_model)
         if uuid is not None:
             return uuid
         else:
@@ -221,7 +219,7 @@ class _BumbleBee(_PMKProbe, metaclass=ABCMeta):
     def attenuation(self, value) -> None:
         if value not in self.properties.attenuation_ratios:
             raise ValueError(f"Attenuation {value} is not supported by this probe.")
-        self._setting_write(0x0131, _unsigned_to_bytes(self.properties.attenuation_ratios.get_integer_value(value), 1))
+        self._setting_write(0x0131, _unsigned_to_bytes(self.properties.attenuation_ratios.get_internal_value(value), 1))
         self._executing_command(0x0105)
 
     @property
@@ -237,12 +235,11 @@ class _BumbleBee(_PMKProbe, metaclass=ABCMeta):
 
     @led_color.setter
     def led_color(self, value: Literal["red", "green", "blue", "magenta", "cyan", "yellow", "white", "black"]):
-
         if value not in self._led_colors:
             raise ValueError(
                 f"LED color {value} is not supported by this probe. List of available colors: "
                 f"{list(self._led_colors.keys())}.")
-        self._setting_write(0x012C, _unsigned_to_bytes(self._led_colors.get_integer_value(value), 1))
+        self._setting_write(0x012C, _unsigned_to_bytes(self._led_colors.get_internal_value(value), 1))
         self._executing_command(0x0305)
 
     @property
@@ -524,7 +521,7 @@ class FireFly(_PMKProbe):
     @property
     def metadata(self) -> FireFlyMetadata:
         """Read the probe's metadata."""
-        return typing.cast(FireFlyMetadata, super().metadata)
+        return cast(FireFlyMetadata, super().metadata)
 
     @property
     def probe_status_led(self):
@@ -545,7 +542,7 @@ class FireFly(_PMKProbe):
 
     @property
     def battery_indicator(self) -> tuple[LED, LED, LED, LED]:
-        """Returns the state of the battery indicator LEDs on the interface board.
+        """Returns the state of the battery indicator LEDs on the _interface board.
 
         The tuple contains the states of the four physical LEDs from bottom to top."""
         levels = {
@@ -588,6 +585,10 @@ class FireFly(_PMKProbe):
     def auto_zero(self):
         self._wr_command(0x0A10, self._i2c_addresses['unified'], DUMMY)
 
+
+BumbleBeeType = TypeVar("BumbleBeeType", bound=_BumbleBee)
+HSDPType = TypeVar("HSDPType", bound=_HSDP)
+ProbeType = TypeVar("ProbeType", bound=_PMKProbe)
 
 _ALL_PMK_PROBES = (
     BumbleBee2kV, BumbleBee1kV, BumbleBee400V, BumbleBee200V, Hornet4kV, HSDP2010, HSDP2010L, HSDP2025, HSDP2025L,

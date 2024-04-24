@@ -10,10 +10,6 @@ class ProbeTypeError(ProbeConnectionError):
     pass
 
 
-class ProbeWriteError(ProbeError):
-    pass
-
-
 class ProbeReadError(ProbeError):
     pass
 

@@ -1,15 +1,19 @@
 """This module contains the classes for the PMK power supplies."""
 import http.client
+import logging
 import re
 import socket
 import time
+from typing import TypeVar
 
 import serial
 import serial.tools.list_ports
 
 from ._devices import PMKDevice, Channel
-from ._errors import ProbeReadError
-from ._hardware_interfaces import LANInterface, USBInterface
+from ._errors import ProbeReadError, ProbeConnectionError
+from ._hardware_interfaces import LANInterface, USBInterface, HardwareInterface
+
+PowerSupplyType = TypeVar("PowerSupplyType", bound="_PMKPowerSupply")
 
 
 class _PMKPowerSupply(PMKDevice):
@@ -21,22 +25,23 @@ class _PMKPowerSupply(PMKDevice):
     _addressing = "W"
     _num_channels = None
 
-    def __init__(self, com_port: str = None, ip_address: str = None, verbose: bool = False):
+    def __init__(self, interface: HardwareInterface, verbose: bool = False):
         super().__init__(channel=Channel.PS_CH, verbose=verbose)
         from .probes import _ALL_PMK_PROBES  # to avoid circular imports
         self.supported_probe_types = _ALL_PMK_PROBES
-        match com_port, ip_address:
-            case com_port, None:
-                self.interface = USBInterface(com_port)
-            case None, ip_address:
-                self.interface = LANInterface(ip_address)
-            case None, None:
-                raise ValueError("Either com_port or ip_address must be specified.")
-            case _:
-                raise ValueError("Only one of com_port or ip_address can be specified.")
+        self._interface = interface
+
+    @classmethod
+    def from_options(cls, com_port: str = None, ip_address: str = None) -> PowerSupplyType:
+        if com_port:
+            return cls(interface=USBInterface(com_port), verbose=False)
+        elif ip_address:
+            return cls(interface=LANInterface(ip_address), verbose=False)
+        else:
+            raise ValueError("No connection information provided")
 
     def __repr__(self):
-        if isinstance(self.interface, USBInterface):
+        if isinstance(self._interface, USBInterface):
             connection_info_name = "com_port"
         else:
             connection_info_name = "ip_address"
@@ -44,30 +49,31 @@ class _PMKPowerSupply(PMKDevice):
             sn_part = f"serial_number={self._serial_number}, "
         else:
             sn_part = ""
-        return (f"{self.__class__.__name__}({sn_part}{connection_info_name}={self.interface.connection_info})")
+        return f"{self.__class__.__name__}({sn_part}{connection_info_name}={self._interface.connection_info})"
 
     @property
-    def _interface(self):
-        return self.interface
+    def interface(self) -> "HardwareInterface":
+        return self._interface
 
     @property
     def connected_probes(self):
         """
 
         """
-        from .probes import _BumbleBee, _HSDP, FireFly
-        to_try = [_BumbleBee, _HSDP, FireFly]
-        connected_probes = {channel: None for channel in Channel}
-        for channel in Channel:
+        from .probes import BumbleBee2kV, HSDP2010, FireFly
+        to_try = [BumbleBee2kV, HSDP2010, FireFly]
+        connected_probes = []
+        for channel in [Channel(i) for i in range(1, self._num_channels + 1)]:
             # for every channel, query the probe for its metadata
             for ProbeType in to_try:
                 try:
                     detected_probe = ProbeType(self, channel, allow_legacy=True)
-                    connected_probes[channel] = detected_probe
+                    connected_probes.append(detected_probe)
                     break
-                except ProbeReadError:
+                except (ProbeReadError, ProbeConnectionError) as e:
+                    print(e)
                     continue
-        return connected_probes
+        return tuple(connected_probes)
 
     # def device_at_channel(self, channel: Channel) -> PMKDevice:
     #     """
@@ -85,7 +91,7 @@ class _PMKPowerSupply(PMKDevice):
 
     def close(self):
         """Disconnects the power supply to free the serial connection."""
-        self.interface.close()
+        self._interface.close()
 
 
 class PS02(_PMKPowerSupply):
@@ -98,31 +104,34 @@ class PS03(_PMKPowerSupply):
     _num_channels = 4  # the PS03 has 4 channels
 
 
-def get_closed_ps_with_metadata(model=None, **connection_info) -> _PMKPowerSupply:
+def auto_ps(model=None, **kwargs) -> PowerSupplyType:
+    """Automatically find a power supply and return it."""
     if not model:
-        ps = PS03(**connection_info)  # works for detecting both PS02 and PS03
-        model = ps.metadata.model
-        ps.close()
-    if model == "PS-02":
-        ps = PS02(**connection_info)
-    elif model == "PS-03":
-        ps = PS03(**connection_info)
-    else:
-        raise ValueError(f"Unknown model: {model}")
-    return ps
+        model_getter_ps = PS03.from_options(**kwargs)
+        model = model_getter_ps.metadata.model
+        model_getter_ps.close()
+    match model:
+        case "PS-02":
+            return PS02.from_options(**kwargs)
+        case "PS-03":
+            return PS03.from_options(**kwargs)
+        case _:
+            raise ValueError("Unknown model")
 
-def _find_power_supplies_usb() -> list[_PMKPowerSupply]:
+
+def _find_power_supplies_usb() -> list[PowerSupplyType]:
     devices = serial.tools.list_ports.comports()
     power_supplies = []
     for device in devices:
         match device.vid, device.pid:
             case 1027, 24577:
-                power_supplies.append(get_closed_ps_with_metadata(com_port=device.device))
+                power_supplies.append(auto_ps(com_port=device.device))
             case _:
                 pass
     return power_supplies
 
-def _find_power_supplies_lan() -> list[_PMKPowerSupply]:
+
+def _find_power_supplies_lan() -> list[PowerSupplyType]:
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP) as sock:
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
@@ -147,11 +156,17 @@ def _find_power_supplies_lan() -> list[_PMKPowerSupply]:
             text = conn.getresponse().read().decode()
             patterns = {"model": r"<Model>([\w-]{5})</Model>", "serial_number": r"<SerialNumber>(\d{4})</SerialNumber>"}
             metadata = {key: re.search(pattern, text).group(1) for key, pattern in patterns.items()}
-            full_info_list.append(get_closed_ps_with_metadata(metadata["model"], ip_address=ip))
+            full_info_list.append(auto_ps(model=metadata["model"], ip_address=ip))
         except (OSError, AttributeError):
             pass
     return full_info_list
 
 
-def find_power_supplies() -> dict[str, list[_PMKPowerSupply]]:
-    return {'usb': _find_power_supplies_usb(), 'lan': _find_power_supplies_lan()}
+def find_power_supplies() -> dict[str, list[PowerSupplyType]]:
+    return {'USB': _find_power_supplies_usb(), 'LAN': _find_power_supplies_lan()}
+
+
+
+if __name__ == "__main__":
+    print(find_power_supplies())
+

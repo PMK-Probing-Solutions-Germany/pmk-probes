@@ -1,43 +1,23 @@
 import datetime
 import time
+from collections import deque
 from math import floor, isclose
 
 import numpy as np
 import pytest
 
-from pmk_probes.probes import BumbleBee2kV, HSDP2010, HSDP2050, FireFly, BumbleBee400V, Hornet4kV, LED, BumbleBee200V, \
-    _BumbleBee
-from pmk_probes.power_supplies import PS03, Channel
-from tests.config import *
+from pmk_probes._devices import Channel
+from pmk_probes._errors import ProbeTypeError
+from pmk_probes.probes import BumbleBee2kV, FireFly, LED, BumbleBee200V, BumbleBeeType
 
 
-def round_down(n, decimals=0):
-    multiplier = 10 ** decimals
-    return floor(n * multiplier) / multiplier
+def test_create_bumblebee_at_ps_ch(ps):
+    with pytest.raises(ProbeTypeError):
+        _ = BumbleBee2kV(ps, channel=Channel.PS_CH)
 
-@pytest.fixture()
-def ps():
-    ps = PS03(**ps_connection_info)
-    yield ps
-    ps.close()
-
-
-@pytest.fixture()
-def bumblebee(ps):
-    bb1 = BumbleBee2kV(ps, test_bumblebee_channel, verbose=True, allow_legacy=True)
-    bb1.factory_reset()
-    time.sleep(3)  # needs 3 seconds to reset
-    yield bb1
-
-@pytest.fixture()
-def hsdp1(ps):
-    yield HSDP2010(ps, test_hsdp_channel, verbose=True)
-
-
-@pytest.fixture()
-def firefly(ps):
-    yield FireFly(ps, test_firefly_channel, verbose=True)
-
+def test_create_bumblebee200v(ps):
+    with pytest.raises(ProbeTypeError):
+        _ = BumbleBee200V(ps, channel=Channel.PS_CH)
 
 class TestBumbleBee:
 
@@ -100,10 +80,12 @@ class TestBumbleBee:
         assert bumblebee.overload_main_counter == 0
 
     def test_factory_reset(self, bumblebee):
+        bumblebee.global_offset = 0
+        bumblebee.attenuation = 100
+        bumblebee.led_color = "red"
         bumblebee.factory_reset()
         time.sleep(3)  # needs 3 seconds to reset
         assert bumblebee.attenuation == 50
-        assert bumblebee.global_offset == 0
         assert bumblebee.led_color == "yellow"
         assert bumblebee.overload_main_counter == 0
 
@@ -119,7 +101,11 @@ class TestBumbleBee:
             for _ in range(abs(amount)):
                 step_function = getattr(bumblebee, step_function_name)
                 step_function()
-            assert bumblebee.attenuation == bumblebee.properties.attenuation_ratios.shift(amount, start_attenuation)
+                time.sleep(0.1)
+            rotatable = deque(bumblebee.properties.attenuation_ratios.user_to_internal)
+            start_index = rotatable.index(start_attenuation)
+            rotatable.rotate(amount)
+            assert bumblebee.attenuation == rotatable[start_index]
 
     @staticmethod
     def offset_step_test(bumblebee, step_function, step_size):
@@ -131,6 +117,7 @@ class TestBumbleBee:
             bumblebee.global_offset = 0
             for _ in range(steps):
                 step_function()
+                time.sleep(0.1)
             print(bumblebee.global_offset, steps * step_size, bumblebee.global_offset == steps * step_size)
             assert bumblebee.global_offset == steps * step_size
 
@@ -162,20 +149,20 @@ class TestBumbleBee:
 
 
 class TestHSDP:
-    def test_read_metadata(self, hsdp1):
-        _ = hsdp1.metadata
+    def test_read_metadata(self, hsdp):
+        _ = hsdp.metadata
 
-    def test_set_offset(self, hsdp1):
+    def test_set_offset(self, hsdp):
         # assert setting the offset raises no error, however values can only be confirmed using a DMM as there is no
         # get-method
-        hsdp1.offset = -10
+        hsdp.offset = -10
         time.sleep(1)
-        hsdp1.offset = 0
+        hsdp.offset = 0
 
-    def test_get_offset(self, hsdp1):
+    def test_get_offset(self, hsdp):
         # assert getting the offset raises an error
         with pytest.raises(NotImplementedError):
-            _ = hsdp1.offset
+            _ = hsdp.offset
 
 
 class TestFireFly:
@@ -192,20 +179,17 @@ class TestFireFly:
         assert firefly.probe_head_on is True
 
     def test_probe_head_off(self, firefly: FireFly):
-        firefly.probe_head_on = False
         assert firefly.probe_head_on is False
 
     def test_status(self, firefly: FireFly):
         print(firefly.probe_status_led)
 
     def test_probe_status_led(self, firefly: FireFly):
-        firefly.probe_head_on = False  # turn off probe head
         assert firefly.probe_status_led == firefly.ProbeStates.PROBE_HEAD_OFF
         firefly.probe_head_on = True  # turn on probe head
         assert firefly.probe_status_led == firefly.ProbeStates.WARMING_UP
 
     def test_battery_level(self, firefly: FireFly):
-        firefly.probe_head_on = False  # turn off probe head
         assert firefly.battery_indicator == (LED.OFF,) * 4  # battery is assumed to be empty
         firefly.probe_head_on = True
         battery_fresh = ((LED.GREEN,) * (i + 1) + (LED.OFF,) * (3 - i) for i in range(4))  # tuples of 1-4 green LEDs
@@ -213,7 +197,6 @@ class TestFireFly:
         assert firefly.battery_indicator in battery_fresh  # battery is assumed to be fresh
 
     def test_battery_voltage(self, firefly: FireFly):
-        firefly.probe_head_on = False  # turn off probe head
         slept = 0
         for i in range(100):  # battery voltage is not available for ~200 ms after turning off probe head
             if firefly.battery_voltage != 0.0:

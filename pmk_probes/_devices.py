@@ -45,11 +45,11 @@ class PMKDevice:
         self.verbose = verbose
         self._serial_number = None
 
-
     @property
-    def _interface(self) -> "HardwareInterface":
+    @abstractmethod
+    def interface(self) -> "HardwareInterface":
         """
-        The interface to the device.
+        The _interface to the device.
         """
         raise NotImplementedError
 
@@ -73,7 +73,7 @@ class PMKDevice:
             self._serial_number = metadata.serial_number
             return metadata
         except Exception as e:
-            raise ProbeConnectionError(f"{e.args[0]} Could not read metadata from {repr(self)}.")\
+            raise ProbeConnectionError(f"{e.args[0]} Could not read metadata from {repr(self)}.") \
                 from e
 
     def _expect(self, expected: list[bytes]) -> None:
@@ -86,11 +86,9 @@ class PMKDevice:
         :raises ProbeReadError: If the bytes read from the serial port do not match the expected bytes.
         """
         for expected_byte in expected:
-            answer = self._interface.read(len(expected_byte))
+            answer = self.interface.read(len(expected_byte))
             if answer != expected_byte:
                 raise ProbeReadError(f"Got {answer} instead of {expected_byte}.")
-            else:
-                pass
         return None
 
     def _query(self, wr_rd: Literal["WR", "RD"], i2c_address: int, command: int, payload: bytes = None,
@@ -100,24 +98,23 @@ class PMKDevice:
         Returns:
             The response as a bytes object.
         """
-        self._interface.reset_input_buffer()  # Clear input buffer in case it wasn't empty
+        self.interface.reset_input_buffer()  # Clear input buffer in case it wasn't empty
         cmd = f"{command:04X}{length:02X}"
         string = f"\x02{wr_rd}{self.channel.value}{i2c_address:02X}{self._addressing}{cmd}"
         if payload is not None:
             string += payload.hex().upper()  # 2 hex digits per byte
         string += "\x03"
         # write the command
-        self._interface.write(string.encode())
+        self.interface.write(string.encode())
         if self.verbose:
             print(f"Sent: {string}")
-        time.sleep(0.1)
         # read the response and ensure it's correct: (STX, ACK, echo, read_payload, ETX, CR)
         self._expect([STX, ACK, f"{self.channel.value}{cmd}".encode()])
         # read the payload
         if wr_rd == "RD":
             # length here means number of bytes, not number of characters
             # decoding (decode()) and creating new bytes (fromhex) is required to get rid of doubly encoded characters
-            read_payload = bytes.fromhex(self._interface.read(length * 2).decode())
+            read_payload = bytes.fromhex(self.interface.read(length * 2).decode())
         else:
             # no payload is returned for WR commands
             read_payload = None

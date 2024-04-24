@@ -26,4 +26,4 @@ dependencies = [
 [project.urls]
 Homepage = "http://www.pmk.de/"
 Documentation = "https://pmk-probes.readthedocs.io/en/latest/"
-Repository = "https://github.com/fewenk-pmk/pmk-probes"
+Repository = "https://github.com/PMK-Probing-Solutions/pmk-probes"

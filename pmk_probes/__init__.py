@@ -1,3 +1,3 @@
 """
-This package combines PMK power supplies and PMK probes into a single interface.
+This package combines PMK power supplies and PMK probes into a single _interface.
 """
