@@ -1,6 +1,8 @@
 import datetime
+import io
 import time
 from collections import deque
+from contextlib import redirect_stdout
 from math import floor, isclose
 
 import numpy as np
@@ -8,6 +10,7 @@ import pytest
 
 from pmk_probes._devices import Channel
 from pmk_probes._errors import ProbeTypeError
+from pmk_probes.power_supplies import PowerSupplyType
 from pmk_probes.probes import BumbleBee2kV, FireFly, LED, BumbleBee200V, BumbleBeeType
 
 
@@ -85,7 +88,7 @@ class TestBumbleBee:
         bumblebee.led_color = "red"
         bumblebee.factory_reset()
         time.sleep(3)  # needs 3 seconds to reset
-        assert bumblebee.attenuation == 50
+        assert bumblebee.attenuation == 500
         assert bumblebee.led_color == "yellow"
         assert bumblebee.overload_main_counter == 0
 
@@ -146,6 +149,9 @@ class TestBumbleBee:
         for attenuation in bumblebee.properties.attenuation_ratios:
             bumblebee.attenuation = attenuation
             assert bumblebee.attenuation == attenuation
+
+    def test_read_temperature(self, bumblebee):
+        print(bumblebee.temperature)
 
 
 class TestHSDP:
@@ -209,3 +215,16 @@ class TestFireFly:
         on_voltage = firefly.battery_voltage
         assert on_voltage < off_voltage  # battery voltage should drop when probe head is on
         print(f"Off voltage: {off_voltage} V, On voltage: {on_voltage} V")
+
+
+def test_demo_script(monkeypatch, bumblebee: BumbleBee2kV) -> None:
+    def mockwrite(data: bytes) -> None:
+        pass
+    def mockexpect(expected: list[bytes]) -> None:
+        print(f"Expecting {expected}")
+    info = io.StringIO()
+    monkeypatch.setattr(bumblebee.interface, "write", mockwrite)
+    monkeypatch.setattr(bumblebee, "_expect", mockexpect)
+    with redirect_stdout(info):
+        bumblebee.attenuation = 100
+    print(info.getvalue())

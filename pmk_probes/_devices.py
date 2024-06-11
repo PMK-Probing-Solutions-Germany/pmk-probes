@@ -73,7 +73,7 @@ class PMKDevice:
             self._serial_number = metadata.serial_number
             return metadata
         except Exception as e:
-            raise ProbeConnectionError(f"{e.args[0]} Could not read metadata from {repr(self)}.") \
+            raise ProbeConnectionError(f"{e.args[0]}. Could not read metadata from {repr(self)}.") \
                 from e
 
     def _expect(self, expected: list[bytes]) -> None:

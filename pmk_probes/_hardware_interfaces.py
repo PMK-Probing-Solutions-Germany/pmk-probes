@@ -134,3 +134,19 @@ class USBInterface(HardwareInterface):
     @property
     def is_open(self) -> bool:
         return self.ser.is_open
+
+
+class EchoInterface(HardwareInterface):
+
+    def _write(self, data: bytes) -> None:
+        pass
+
+    def _read(self, length: int) -> bytes:
+        pass
+
+    def reset_input_buffer(self) -> None:
+        pass
+
+    @property
+    def is_open(self) -> bool:
+        return True

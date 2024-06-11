@@ -272,6 +272,15 @@ class _BumbleBee(_PMKProbe, metaclass=ABCMeta):
         """
         return self._setting_read_int(0x013F, 2)
 
+    @property
+    def temperature(self) -> float:
+        """
+        Get the temperature of the probe in °C.
+
+        :return: The temperature of the probe in °C.
+        """
+        return self._setting_read_int(0x0142, 2) / 5 - 50
+
     # All the following methods represent keys on the BumbleBee keyboard
 
     def clear_overload_counters(self) -> None:
