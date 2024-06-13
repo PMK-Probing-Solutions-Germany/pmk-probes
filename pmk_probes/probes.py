@@ -134,7 +134,6 @@ class _BumbleBee(_PMKProbe, metaclass=ABCMeta):
         try:
             byte = _decimal_to_byte(self.properties.scaling_factor, value, 2)
             self._setting_write(setting_address, byte)
-            print(f"Writing {byte} to setting address {setting_address}.")
         except OverflowError as e:
             raise ValueError(f"Value {value} is out of range for this setting. Value must be in range"
                              f" {min_max_signed_int(2)}.") from e

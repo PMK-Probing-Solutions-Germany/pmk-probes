@@ -120,7 +120,6 @@ class TestBumbleBee:
             for _ in range(steps):
                 step_function()
                 time.sleep(0.1)
-            print(bumblebee.global_offset, steps * step_size, bumblebee.global_offset == steps * step_size)
             assert bumblebee.global_offset == steps * step_size
 
     def test_increase_offset_small(self, bumblebee):

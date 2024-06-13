@@ -4,7 +4,7 @@ import logging
 import re
 import socket
 import time
-from typing import TypeVar
+from typing import TypeVar, Any
 
 import serial
 import serial.tools.list_ports
@@ -17,10 +17,7 @@ PowerSupplyType = TypeVar("PowerSupplyType", bound="_PMKPowerSupply")
 
 
 class _PMKPowerSupply(PMKDevice):
-    """
-    The class that controls access to the serial resource of the PMK power supply.
-
-    """
+    """The class that controls access to the serial resource of the PMK power supply."""
     _i2c_addresses: dict[str, int] = {"metadata": 0x04}
     _addressing = "W"
     _num_channels = None
@@ -41,25 +38,19 @@ class _PMKPowerSupply(PMKDevice):
             raise ValueError("No connection information provided")
 
     def __repr__(self):
-        if isinstance(self._interface, USBInterface):
-            connection_info_name = "com_port"
-        else:
-            connection_info_name = "ip_address"
         if self._serial_number:
             sn_part = f"serial_number={self._serial_number}, "
         else:
             sn_part = ""
-        return f"{self.__class__.__name__}({sn_part}{connection_info_name}={self._interface.connection_info})"
+        return f"{self.__class__.__name__}({sn_part}{next(iter(self._interface.connection_info))}={self._interface.connection_info})"
 
     @property
     def interface(self) -> "HardwareInterface":
         return self._interface
 
     @property
-    def connected_probes(self):
-        """
-
-        """
+    def connected_probes(self) -> tuple[Any, ...]:
+        """Show all connected probes for this power supply."""
         from .probes import BumbleBee2kV, HSDP2010, FireFly
         to_try = [BumbleBee2kV, HSDP2010, FireFly]
         connected_probes = []
@@ -70,8 +61,7 @@ class _PMKPowerSupply(PMKDevice):
                     detected_probe = ProbeType(self, channel, allow_legacy=True)
                     connected_probes.append(detected_probe)
                     break
-                except (ProbeReadError, ProbeConnectionError) as e:
-                    print(e)
+                except (ProbeReadError, ProbeConnectionError):
                     continue
         return tuple(connected_probes)
 

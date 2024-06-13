@@ -1,6 +1,3 @@
-import pytest
-
-from pmk_probes._hardware_interfaces import USBInterface
 from pmk_probes.power_supplies import find_power_supplies
 
 
@@ -17,8 +14,7 @@ class TestPMKPowerSupply:
         print(connected_probes)
 
     def test_power_supply_repr(self, ps):
-        middle_part = "com_port" if isinstance(ps.interface, USBInterface) else "ip_address"
-        assert repr(ps) == f"{ps.__class__.__name__}({middle_part}={ps.interface})"
+        assert repr(ps) == f"{ps.__class__.__name__}({next(iter(ps.interface.connection_info))}={ps.interface})"
 
 
 def test_find_power_supplies():

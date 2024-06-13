@@ -19,7 +19,7 @@ def probe_factory(section: str, ps: _PMKPowerSupply) -> ProbeType:
     return probe_class_from_config(section)(
         ps,
         Channel(config.getint(section, "channel")),
-        verbose=True,
+        verbose=False,
         allow_legacy=True
     )
 

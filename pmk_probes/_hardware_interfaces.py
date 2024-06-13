@@ -1,8 +1,5 @@
 import re
-import socket
-import time
 from abc import ABCMeta, abstractmethod
-from collections import namedtuple
 
 import serial
 import serial.tools.list_ports
@@ -12,7 +9,7 @@ from pmk_probes._errors import ProbeConnectionError
 
 class HardwareInterface(metaclass=ABCMeta):
 
-    def __init__(self, connection_info: str):
+    def __init__(self, connection_info: dict[str, str]):
         self.connection_info = connection_info  # ip_address/com_port depending on the _interface
 
     def __repr__(self):
@@ -62,7 +59,7 @@ class SerialInterface(HardwareInterface):
     def __init__(self, port: str):
         pattern = re.compile(r'://([^:/]+):')
         match = pattern.search(port)
-        super().__init__(match.group(1)) if match else super().__init__(port)
+        super().__init__({"ip_address": match.group(1)}) if match else super().__init__({"com_port": port})
         kwargs = {"baudrate": 115200, "timeout": 1, "rtscts": False, "dsrdtr": False, "do_not_open": True}
         self.ser = serial.serial_for_url(url=port, **kwargs)
 
