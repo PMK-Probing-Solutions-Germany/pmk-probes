@@ -31,7 +31,7 @@ def conf():
 
 @pytest.fixture(params=config.items(section="devices.PS.connection"))
 def ps(request):
-    ps = PS03.from_options(**dict((request.param,)))
+    ps = PS03(**dict((request.param,)))
     yield ps
     ps.close()
 

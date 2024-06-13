@@ -22,20 +22,17 @@ class _PMKPowerSupply(PMKDevice):
     _addressing = "W"
     _num_channels = None
 
-    def __init__(self, interface: HardwareInterface, verbose: bool = False):
+    def __init__(self, com_port: str = None, ip_address: str = None, verbose: bool = False):
+        if com_port:
+            interface = SerialInterface(com_port)
+        elif ip_address:
+            interface = SerialInterface(f"socket://{ip_address}:10001")
+        else:
+            raise ValueError("No connection information provided")
         super().__init__(channel=Channel.PS_CH, verbose=verbose)
         from .probes import _ALL_PMK_PROBES  # to avoid circular imports
         self.supported_probe_types = _ALL_PMK_PROBES
         self._interface = interface
-
-    @classmethod
-    def from_options(cls, com_port: str = None, ip_address: str = None) -> PowerSupplyType:
-        if com_port:
-            return cls(interface=SerialInterface(com_port), verbose=False)
-        elif ip_address:
-            return cls(interface=SerialInterface(f"socket://{ip_address}:10001"), verbose=False)
-        else:
-            raise ValueError("No connection information provided")
 
     def __repr__(self):
         if self._serial_number:
@@ -94,17 +91,17 @@ class PS03(_PMKPowerSupply):
     _num_channels = 4  # the PS03 has 4 channels
 
 
-def auto_ps(model=None, **kwargs) -> PowerSupplyType:
+def _auto_ps(model=None, **kwargs) -> PowerSupplyType:
     """Automatically find a power supply and return it."""
     if not model:
-        model_getter_ps = PS03.from_options(**kwargs)
+        model_getter_ps = PS03(**kwargs)
         model = model_getter_ps.metadata.model
         model_getter_ps.close()
     match model:
         case "PS-02":
-            return PS02.from_options(**kwargs)
+            return PS02(**kwargs)
         case "PS-03":
-            return PS03.from_options(**kwargs)
+            return PS03(**kwargs)
         case _:
             raise ValueError("Unknown model")
 
@@ -115,7 +112,7 @@ def _find_power_supplies_usb() -> list[PowerSupplyType]:
     for device in devices:
         match device.vid, device.pid:
             case 1027, 24577:
-                power_supplies.append(auto_ps(com_port=device.device))
+                power_supplies.append(_auto_ps(com_port=device.device))
             case _:
                 pass
     return power_supplies
@@ -146,7 +143,7 @@ def _find_power_supplies_lan() -> list[PowerSupplyType]:
             text = conn.getresponse().read().decode()
             patterns = {"model": r"<Model>([\w-]{5})</Model>", "serial_number": r"<SerialNumber>(\d{4})</SerialNumber>"}
             metadata = {key: re.search(pattern, text).group(1) for key, pattern in patterns.items()}
-            full_info_list.append(auto_ps(model=metadata["model"], ip_address=ip))
+            full_info_list.append(_auto_ps(model=metadata["model"], ip_address=ip))
         except (OSError, AttributeError):
             pass
     return full_info_list
