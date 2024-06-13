@@ -1,5 +1,5 @@
-Installation instruction
-========================
+Installation instructions
+=========================
 
 This package is shared using PyPI. Install the package using pip:
 
