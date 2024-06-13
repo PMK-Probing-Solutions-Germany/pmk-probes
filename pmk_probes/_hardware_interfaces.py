@@ -1,3 +1,4 @@
+import re
 import socket
 import time
 from abc import ABCMeta, abstractmethod
@@ -55,62 +56,15 @@ class HardwareInterface(metaclass=ABCMeta):
         raise NotImplementedError
 
 
-class LANInterface(HardwareInterface):
-    def __init__(self, ip_address: str):
-        super().__init__(ip_address)
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self._is_open = False  # flag to check if the connection is open, not provided by socket
-        self.buffer = bytearray()
 
-    def _write(self, data: bytes):
-        totalsent = 0
-        while totalsent < len(data):
-            sent = self.sock.send(data[totalsent:])
-            if sent == 0:
-                raise RuntimeError("socket connection broken")
-            totalsent = totalsent + sent
+class SerialInterface(HardwareInterface):
 
-    def _read_sock_into_buffer(self):
-        chunks = bytearray()
-        bytes_recd = 0
-        chunk = b''
-        while b'\r' not in chunk:
-            chunk = self.sock.recv(4096)
-            if chunk == b'':
-                raise RuntimeError("socket connection broken")
-            chunks.extend(chunk)
-            bytes_recd = bytes_recd + len(chunk)
-        self.buffer += chunks
-
-    def _read(self, length: int) -> bytes:
-        if len(self.buffer) < length:
-            self._read_sock_into_buffer()
-        data = self.buffer[:length]
-        self.buffer = self.buffer[length:]
-        return bytes(data)
-
-    def reset_input_buffer(self) -> None:
-        self.buffer = bytearray()
-
-    def open(self) -> None:
-        self.sock.connect((self.connection_info, 10001))
-        self._is_open = True
-
-    def close(self) -> None:
-        self.sock.close()
-        self._is_open = False
-
-    @property
-    def is_open(self) -> bool:
-        return self._is_open
-
-
-class USBInterface(HardwareInterface):
-
-    def __init__(self, com_port: str):
-        super().__init__(com_port)
-        self.ser = serial.Serial(baudrate=115200, timeout=1, rtscts=False, dsrdtr=False)
-        self.ser.port = com_port
+    def __init__(self, port: str):
+        pattern = re.compile(r'://([^:/]+):')
+        match = pattern.search(port)
+        super().__init__(match.group(1)) if match else super().__init__(port)
+        kwargs = {"baudrate": 115200, "timeout": 1, "rtscts": False, "dsrdtr": False, "do_not_open": True}
+        self.ser = serial.serial_for_url(url=port, **kwargs)
 
     def _write(self, data: bytes) -> None:
         self.ser.write(data)
@@ -126,7 +80,7 @@ class USBInterface(HardwareInterface):
         try:
             self.ser.open()
         except serial.SerialException:
-            raise ProbeConnectionError(f"Could not open {self.connection_info}. Is the power supply connected?")
+            raise ProbeConnectionError(f"Could not open power supply at {self.connection_info}. Is the power supply connected?")
 
     def close(self) -> None:
         self.ser.close()
@@ -134,7 +88,6 @@ class USBInterface(HardwareInterface):
     @property
     def is_open(self) -> bool:
         return self.ser.is_open
-
 
 class EchoInterface(HardwareInterface):
 

@@ -31,7 +31,7 @@ class _PMKProbe(PMKDevice, metaclass=ABCMeta):
     _legacy_model_name = None  # model name of the probe in legacy mode
 
     def __init__(self, power_supply: _PMKPowerSupply, channel: Channel, verbose: bool = False,
-                 allow_legacy: bool = False):
+                 allow_legacy: bool = True):
         super().__init__(channel, verbose=verbose)
         self.probe_model = self.__class__.__name__
         self.power_supply = power_supply
@@ -83,7 +83,7 @@ class _PMKProbe(PMKDevice, metaclass=ABCMeta):
         if uuid is not None:
             return uuid
         else:
-            raise NotImplementedError("Probe model has no UUID assigned. Please add it to the UUIDs dictionary.")
+            raise NotImplementedError("Probe model has no UUID assigned.")
 
     def _write_float(self, value, setting_address, executing_command_address):
         raise NotImplementedError

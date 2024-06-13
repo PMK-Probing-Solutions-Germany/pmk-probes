@@ -11,7 +11,7 @@ import serial.tools.list_ports
 
 from ._devices import PMKDevice, Channel
 from ._errors import ProbeReadError, ProbeConnectionError
-from ._hardware_interfaces import LANInterface, USBInterface, HardwareInterface
+from ._hardware_interfaces import HardwareInterface, SerialInterface
 
 PowerSupplyType = TypeVar("PowerSupplyType", bound="_PMKPowerSupply")
 
@@ -34,9 +34,9 @@ class _PMKPowerSupply(PMKDevice):
     @classmethod
     def from_options(cls, com_port: str = None, ip_address: str = None) -> PowerSupplyType:
         if com_port:
-            return cls(interface=USBInterface(com_port), verbose=False)
+            return cls(interface=SerialInterface(com_port), verbose=False)
         elif ip_address:
-            return cls(interface=LANInterface(ip_address), verbose=False)
+            return cls(interface=SerialInterface(f"socket://{ip_address}:10001"), verbose=False)
         else:
             raise ValueError("No connection information provided")
 

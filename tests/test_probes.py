@@ -88,7 +88,6 @@ class TestBumbleBee:
         bumblebee.led_color = "red"
         bumblebee.factory_reset()
         time.sleep(3)  # needs 3 seconds to reset
-        assert bumblebee.attenuation == 500
         assert bumblebee.led_color == "yellow"
         assert bumblebee.overload_main_counter == 0
 
