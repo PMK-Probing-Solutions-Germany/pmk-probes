@@ -7,7 +7,7 @@ packages = ["pmk_probes"]
 
 [project]
 name = "pmk-probes"
-version = "1.0.11"
+dynamic = ["version"]
 authors = [
   { name="Felix Wenk", email="felix.wenk@pmk.de" },
 ]
@@ -22,6 +22,9 @@ classifiers = [
 dependencies = [
     "pyserial >= 3.5",
 ]
+
+[tool.hatch.version]
+path = "pmk_probes/__init__.py"
 
 [project.urls]
 Homepage = "http://www.pmk.de/"
