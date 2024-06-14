@@ -9,7 +9,7 @@
 import os
 import sys
 
-import pmk_probes
+from pmk_probes import _version
 
 sys.path.append(os.path.abspath('../..'))
 
@@ -17,7 +17,7 @@ project = 'PMK Probes'
 copyright = '2024, PMK Mess- und Kommunikationstechnik GmbH'
 author = 'Felix Wenk'
 
-release = pmk_probes.__version__
+release = _version.__version__
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
