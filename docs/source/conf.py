@@ -16,6 +16,7 @@ sys.path.append(os.path.abspath('../..'))
 project = 'PMK Probes'
 copyright = '2024, PMK Mess- und Kommunikationstechnik GmbH'
 author = 'Felix Wenk'
+
 release = pmk_probes.__version__
 
 # -- General configuration ---------------------------------------------------
