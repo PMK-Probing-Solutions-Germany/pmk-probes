@@ -1,5 +1,4 @@
 import io
-import io
 import time
 from collections import deque
 from contextlib import redirect_stdout
@@ -159,7 +158,6 @@ class TestHSDP:
         # assert setting the offset raises no error, however values can only be confirmed using a DMM as there is no
         # get-method
         hsdp.offset = -10
-        time.sleep(1)
         hsdp.offset = 0
 
     def test_get_offset(self, hsdp):
