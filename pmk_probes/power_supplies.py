@@ -1,9 +1,7 @@
 """This module contains the classes for the PMK power supplies."""
 import http.client
-import logging
 import re
 import socket
-import time
 from typing import TypeVar, Any
 
 import serial
@@ -32,7 +30,7 @@ class _PMKPowerSupply(PMKDevice):
         super().__init__(channel=Channel.PS_CH, verbose=verbose)
         from .probes import _ALL_PMK_PROBES  # to avoid circular imports
         self.supported_probe_types = _ALL_PMK_PROBES
-        self._interface = interface
+        self.interface = interface
 
     def __repr__(self):
         if self._serial_number:
@@ -42,8 +40,8 @@ class _PMKPowerSupply(PMKDevice):
         return f"{self.__class__.__name__}({sn_part}{next(iter(self._interface.connection_info))}={self._interface.connection_info})"
 
     @property
-    def interface(self) -> "HardwareInterface":
-        return self._interface
+    def _interface(self) -> "HardwareInterface":
+        return self.interface
 
     @property
     def connected_probes(self) -> tuple[Any, ...]:

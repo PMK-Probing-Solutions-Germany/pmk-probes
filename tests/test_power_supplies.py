@@ -7,14 +7,14 @@ class TestPMKPowerSupply:
 
     def test_close(self, ps):
         ps.close()
-        assert ps.interface.is_open is False
+        assert ps._interface.is_open is False
 
     def test_connected_probes(self, ps):
         connected_probes = ps.connected_probes
         print(connected_probes)
 
     def test_power_supply_repr(self, ps):
-        assert repr(ps) == f"{ps.__class__.__name__}({next(iter(ps.interface.connection_info))}={ps.interface})"
+        assert repr(ps) == f"{ps.__class__.__name__}({next(iter(ps._interface.connection_info))}={ps._interface})"
 
 
 def test_find_power_supplies():

@@ -1,11 +1,9 @@
-import time
 from abc import abstractmethod
-from collections import namedtuple
 from enum import Enum
 from functools import lru_cache
 from typing import Literal
 
-from ._data_structures import PMKMetadata, PMKProbeProperties
+from ._data_structures import PMKMetadata
 from ._errors import ProbeReadError, ProbeConnectionError
 from ._hardware_interfaces import HardwareInterface
 
@@ -47,9 +45,9 @@ class PMKDevice:
 
     @property
     @abstractmethod
-    def interface(self) -> "HardwareInterface":
+    def _interface(self) -> "HardwareInterface":
         """
-        The _interface to the device.
+        The interface to the device.
         """
         raise NotImplementedError
 
@@ -86,7 +84,7 @@ class PMKDevice:
         :raises ProbeReadError: If the bytes read from the serial port do not match the expected bytes.
         """
         for expected_byte in expected:
-            answer = self.interface.read(len(expected_byte))
+            answer = self._interface.read(len(expected_byte))
             if answer != expected_byte:
                 raise ProbeReadError(f"Got {answer} instead of {expected_byte}.")
         return None
@@ -98,14 +96,14 @@ class PMKDevice:
         Returns:
             The response as a bytes object.
         """
-        self.interface.reset_input_buffer()  # Clear input buffer in case it wasn't empty
+        self._interface.reset_input_buffer()  # Clear input buffer in case it wasn't empty
         cmd = f"{command:04X}{length:02X}"
         string = f"\x02{wr_rd}{self.channel.value}{i2c_address:02X}{self._addressing}{cmd}"
         if payload is not None:
             string += payload.hex().upper()  # 2 hex digits per byte
         string += "\x03"
         # write the command
-        self.interface.write(string.encode())
+        self._interface.write(string.encode())
         if self.verbose:
             print(f"Sent: {string}")
         # read the response and ensure it's correct: (STX, ACK, echo, read_payload, ETX, CR)
@@ -114,7 +112,7 @@ class PMKDevice:
         if wr_rd == "RD":
             # length here means number of bytes, not number of characters
             # decoding (decode()) and creating new bytes (fromhex) is required to get rid of doubly encoded characters
-            read_payload = bytes.fromhex(self.interface.read(length * 2).decode())
+            read_payload = bytes.fromhex(self._interface.read(length * 2).decode())
         else:
             # no payload is returned for WR commands
             read_payload = None

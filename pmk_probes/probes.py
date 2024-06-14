@@ -8,10 +8,10 @@ from enum import Enum
 from functools import lru_cache
 from typing import Literal, TypeVar, cast
 
-from .power_supplies import _PMKPowerSupply
 from ._data_structures import UUIDs, UserMapping, FireFlyMetadata, PMKProbeProperties, LED
 from ._devices import PMKDevice, Channel, DUMMY
 from ._errors import ProbeTypeError, UUIDReadError
+from .power_supplies import _PMKPowerSupply
 
 
 def _unsigned_to_bytes(command: int, length: int) -> bytes:
@@ -74,7 +74,7 @@ class _PMKProbe(PMKDevice, metaclass=ABCMeta):
         return metadata_value == expected_value
 
     @property
-    def interface(self):
+    def _interface(self):
         return self.power_supply.interface
 
     @property

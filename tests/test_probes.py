@@ -1,17 +1,16 @@
-import datetime
+import io
 import io
 import time
 from collections import deque
 from contextlib import redirect_stdout
-from math import floor, isclose
+from math import isclose
 
 import numpy as np
 import pytest
 
 from pmk_probes._devices import Channel
 from pmk_probes._errors import ProbeTypeError
-from pmk_probes.power_supplies import PowerSupplyType
-from pmk_probes.probes import BumbleBee2kV, FireFly, LED, BumbleBee200V, BumbleBeeType
+from pmk_probes.probes import BumbleBee2kV, FireFly, LED, BumbleBee200V
 
 
 def test_create_bumblebee_at_ps_ch(ps):
@@ -221,7 +220,7 @@ def test_demo_script(monkeypatch, bumblebee: BumbleBee2kV) -> None:
     def mockexpect(expected: list[bytes]) -> None:
         print(f"Expecting {expected}")
     info = io.StringIO()
-    monkeypatch.setattr(bumblebee.interface, "write", mockwrite)
+    monkeypatch.setattr(bumblebee._interface, "write", mockwrite)
     monkeypatch.setattr(bumblebee, "_expect", mockexpect)
     with redirect_stdout(info):
         bumblebee.attenuation = 100
