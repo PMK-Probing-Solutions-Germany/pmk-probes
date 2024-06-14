@@ -2,7 +2,7 @@
 #
 # For the full list of built-in configuration values, see the documentation:
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
-
+import importlib.metadata
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
@@ -14,7 +14,7 @@ sys.path.append(os.path.abspath('../..'))
 project = 'PMK Probes'
 copyright = '2024, PMK Mess- und Kommunikationstechnik GmbH'
 author = 'Felix Wenk'
-release = '1.0.8'
+release = importlib.metadata.version("pmk_probes")
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
