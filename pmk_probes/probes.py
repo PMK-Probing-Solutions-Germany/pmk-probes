@@ -83,7 +83,7 @@ class _PMKProbe(PMKDevice, metaclass=ABCMeta):
         if uuid is not None:
             return uuid
         else:
-            raise NotImplementedError("Probe model has no UUID assigned.")
+            raise ProbeTypeError("Probe model has no UUID assigned.")
 
     def _write_float(self, value, setting_address, executing_command_address):
         raise NotImplementedError
@@ -96,6 +96,12 @@ class _PMKProbe(PMKDevice, metaclass=ABCMeta):
 
     def _setting_read_int(self, setting_address: int, setting_byte_count: Literal[1, 2, 4], signed: bool = False):
         return int.from_bytes(self._setting_read_raw(setting_address, setting_byte_count), "big", signed=signed)
+
+    def _int_to_bool(self, integer: int) -> tuple[bool, ...]:
+        pass
+
+    def _setting_read_bool(self, setting_address: int, setting_position: int = 0):
+        return bool(self._setting_read_int(setting_address, setting_position + 1))
 
     def _wr_command(self, command: int, i2c_address, payload: bytes) -> None:
         """
@@ -126,8 +132,9 @@ class _BumbleBee(_PMKProbe, metaclass=ABCMeta):
     def _read_float(self, setting_address: int):
         return _bytes_to_decimal(self.properties.scaling_factor, self._setting_read_raw(setting_address, 2))
 
-    def _write_float(self, value, setting_address, executing_command_address):
+    def _write_float(self, value, setting_address, executing_command_address=None):
         def min_max_signed_int(n):
+            """Return the minimum and maximum signed integer values that can be represented with n bytes."""
             val = 2 ** (n * 8 - 1)
             return math.ceil(-val / self.properties.scaling_factor), (val - 1) // self.properties.scaling_factor
 
@@ -137,7 +144,8 @@ class _BumbleBee(_PMKProbe, metaclass=ABCMeta):
         except OverflowError as e:
             raise ValueError(f"Value {value} is out of range for this setting. Value must be in range"
                              f" {min_max_signed_int(2)}.") from e
-        self._executing_command(executing_command_address)
+        if executing_command_address:
+            self._executing_command(executing_command_address)
 
     def _executing_command(self, command: int):
         self._wr_command(self._command_address, self._i2c_addresses['unified'], _unsigned_to_bytes(command, 2))
@@ -170,7 +178,7 @@ class _BumbleBee(_PMKProbe, metaclass=ABCMeta):
 
     @offset_step_small.setter
     def offset_step_small(self, value: int):
-        self._write_float(value, 0x0135, 0x0A05)
+        self._write_float(value, 0x0135, None)
 
     @property
     def offset_step_large(self):
@@ -186,7 +194,7 @@ class _BumbleBee(_PMKProbe, metaclass=ABCMeta):
 
     @offset_step_large.setter
     def offset_step_large(self, value: int):
-        self._write_float(value, 0x0137, 0x0A05)
+        self._write_float(value, 0x0137, None)
 
     @property
     def offset_step_extra_large(self):
@@ -202,7 +210,7 @@ class _BumbleBee(_PMKProbe, metaclass=ABCMeta):
 
     @offset_step_extra_large.setter
     def offset_step_extra_large(self, value: int):
-        self._write_float(value, 0x0139, 0x0A05)
+        self._write_float(value, 0x0139, None)
 
     @property
     def attenuation(self) -> int:
@@ -240,6 +248,30 @@ class _BumbleBee(_PMKProbe, metaclass=ABCMeta):
                 f"{list(self._led_colors.keys())}.")
         self._setting_write(0x012C, _unsigned_to_bytes(self._led_colors.get_internal_value(value), 1))
         self._executing_command(0x0305)
+
+    @property
+    def offset_sync_enabled(self) -> bool:
+        """
+        Read or write the offset synchronization setting. If set to True, the offset will be synchronized for all
+        attenuation settings, otherwise it is scaled proportionally when switching the attenuation ratio.
+
+        :getter: Returns the offset synchronization setting.
+        :setter: Sets the offset synchronization setting.
+        """
+        return self._setting_read_bool(0x012F)
+
+    @offset_sync_enabled.setter
+    def offset_sync_enabled(self, value: bool) -> None:
+        self._setting_write(0x012F, _unsigned_to_bytes(int(value), 1))
+        self._executing_command(0x0A05)
+
+    @property
+    def overload_buzzer_enabled(self):
+        return self._setting_read_bool(0x012D)
+
+    @property
+    def hold_overload(self):
+        return self._setting_read_bool(0x012D, 0)
 
     @property
     def overload_positive_counter(self) -> int:
@@ -577,7 +609,7 @@ class FireFly(_PMKProbe):
 
         :getter: Returns the current state of the probe head.
         :setter: Sets the state of the probe head and waits until the attribute change is confirmed by the probe."""
-        return self._probe_head_on.get_user_value(self._setting_read_int(0x090A, 1))
+        return self._setting_read_bool(0x090A)
 
     @probe_head_on.setter
     def probe_head_on(self, value: bool):
@@ -590,7 +622,12 @@ class FireFly(_PMKProbe):
         else:
             pass  # no need to do anything if the probe head is already in the desired state
 
-    def auto_zero(self):
+    def auto_zero(self) -> None:
+        """
+        Performs an auto zero on the probe.
+
+        :return: None
+        """
         self._wr_command(0x0A10, self._i2c_addresses['unified'], DUMMY)
 
 
