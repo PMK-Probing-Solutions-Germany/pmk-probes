@@ -1,6 +1,5 @@
 import configparser
 import sys
-import time
 
 import pytest
 
@@ -19,14 +18,9 @@ def probe_factory(section: str, ps: _PMKPowerSupply) -> ProbeType:
     return probe_class_from_config(section)(
         ps,
         Channel(config.getint(section, "channel")),
-        verbose=False,
-        allow_legacy=True
+        verbose=True,
+        allow_legacy=config.getboolean(section, "allow_legacy")
     )
-
-
-@pytest.fixture
-def conf():
-    return config
 
 
 @pytest.fixture(params=config.items(section="devices.PS.connection"))
@@ -36,11 +30,9 @@ def ps(request):
     ps.close()
 
 
-@pytest.fixture
-def bumblebee(ps):
-    bb: BumbleBeeType = probe_factory("devices.BumbleBee", ps)
-    # bb1.factory_reset()
-    # time.sleep(3)  # needs 3 seconds to reset
+@pytest.fixture(params=["devices.BumbleBee", "devices.BumbleBeeLegacy"])
+def bumblebee(request, ps):
+    bb: BumbleBeeType = probe_factory(request.param, ps)
     yield bb
     bb.global_offset = 0
     bb.attenuation = bb.properties.attenuation_ratios.get_user_value(1)

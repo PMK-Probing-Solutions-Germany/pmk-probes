@@ -83,7 +83,7 @@ class _PMKProbe(PMKDevice, metaclass=ABCMeta):
         if uuid is not None:
             return uuid
         else:
-            raise NotImplementedError("Probe model has no UUID assigned.")
+            raise ProbeTypeError("Probe model has no UUID assigned.")
 
     def _write_float(self, value, setting_address, executing_command_address):
         raise NotImplementedError
@@ -91,10 +91,10 @@ class _PMKProbe(PMKDevice, metaclass=ABCMeta):
     def _setting_write(self, setting_address: int, setting_value: bytes):
         self._wr_command(setting_address, self._i2c_addresses['unified'], setting_value)
 
-    def _setting_read_raw(self, setting_address: int, setting_byte_count: Literal[1, 2, 4]):
+    def _setting_read_raw(self, setting_address: int, setting_byte_count: int):
         return self._rd_command(setting_address, self._i2c_addresses['unified'], setting_byte_count)
 
-    def _setting_read_int(self, setting_address: int, setting_byte_count: Literal[1, 2, 4], signed: bool = False):
+    def _setting_read_int(self, setting_address: int, setting_byte_count: int, signed: bool = False):
         return int.from_bytes(self._setting_read_raw(setting_address, setting_byte_count), "big", signed=signed)
 
     def _wr_command(self, command: int, i2c_address, payload: bytes) -> None:
@@ -122,6 +122,13 @@ class _BumbleBee(_PMKProbe, metaclass=ABCMeta):
     _overload_flags = UserMapping(
         {"no overload": 0, "positive overload": 1, "negative overload": 2, "main overload": 4})
     _legacy_model_name = "BumbleBee"
+
+    def __init__(self, power_supply: _PMKPowerSupply, channel: Channel, verbose: bool = False,
+                 allow_legacy: bool = True):
+        super().__init__(power_supply, channel, verbose, allow_legacy)
+        if self.metadata.software_revision == "1.0":
+            # TODO: this will not work / throw an error, need to rework properties
+            self.properties.scaling_factor = 16  # BumbleBee firmware 1.0 uses a different scaling factor
 
     def _read_float(self, setting_address: int):
         return _bytes_to_decimal(self.properties.scaling_factor, self._setting_read_raw(setting_address, 2))
@@ -357,7 +364,7 @@ class _BumbleBee(_PMKProbe, metaclass=ABCMeta):
 
     def decrease_offset_extra_large(self) -> None:
         """
-        Increases the offset setting of the BumbleBee by :py:attr:`~offset_step_extra_large`.
+        Decreases the offset setting of the BumbleBee by :py:attr:`~offset_step_extra_large`.
 
         :return: None
         """
@@ -366,7 +373,7 @@ class _BumbleBee(_PMKProbe, metaclass=ABCMeta):
 
 class BumbleBee2kV(_BumbleBee):
     """
-    Class for controlling the BumbleBee probe with ±2000 V input voltage. See http://www.pmk.de/en/en/bumblebee for
+    Class for controlling PMK BumbleBee probes with ±2000 V input voltage. See http://www.pmk.de/en/en/bumblebee for
     specifications.
     """
 
@@ -418,7 +425,7 @@ class BumbleBee200V(_BumbleBee):
 
 class Hornet4kV(_BumbleBee):
     """
-    Class for controlling the upcoming PMK Hornet probe. See http://www.pmk.de/en/home for specifications.
+    Class for controlling PMK Hornet probes with ±4000 V. See http://www.pmk.de/en/home for specifications.
     """
 
     @property
@@ -532,7 +539,7 @@ class FireFly(_PMKProbe):
         return cast(FireFlyMetadata, super().metadata)
 
     @property
-    def probe_status_led(self):
+    def probe_status_led(self) -> ProbeStates:
         """Returns the state of the probe status LED."""
         return self.ProbeStates(self._setting_read_raw(0x080B, 1))
 
@@ -580,7 +587,7 @@ class FireFly(_PMKProbe):
         return self._probe_head_on.get_user_value(self._setting_read_int(0x090A, 1))
 
     @probe_head_on.setter
-    def probe_head_on(self, value: bool):
+    def probe_head_on(self, value: bool) -> None:
         if self.probe_head_on != value:
             self._wr_command(0x0803, self._i2c_addresses['unified'], DUMMY)
             timeout = time.time() + 5

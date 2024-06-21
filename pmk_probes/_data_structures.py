@@ -1,11 +1,9 @@
+import datetime
 import logging
 import struct
 from dataclasses import dataclass, fields
-import datetime
 from enum import Enum, auto
-from typing import ClassVar, Any, Union, NamedTuple, TypeVar, TypeAlias
-
-from pmk_probes._errors import ProbeReadError
+from typing import ClassVar, Any, Union, NamedTuple
 
 DATE_FORMAT = "%Y%m%d"
 
@@ -64,6 +62,7 @@ class UserMapping:
 UUIDs = UserMapping({
     "Hornet4kV": "886-142-504",
     "BumbleBee2kV": "886-102-504",
+    "BumbleBee1kV": "886-132-504",
     "BumbleBee400V": "886-122-504",
     "BumbleBee200V": "886-112-504",
     "HSDP4010": "88T-400-008",
