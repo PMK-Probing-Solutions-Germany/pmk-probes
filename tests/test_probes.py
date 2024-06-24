@@ -16,11 +16,16 @@ def test_create_bumblebee_at_ps_ch(ps):
     with pytest.raises(ProbeTypeError):
         _ = BumbleBee2kV(ps, channel=Channel.PS_CH)
 
+
 def test_create_bumblebee200v(ps):
     with pytest.raises(ProbeTypeError):
         _ = BumbleBee200V(ps, channel=Channel.PS_CH)
 
+
 class TestBumbleBee:
+
+    def test_old_offset(self, bumblebee):
+        assert bumblebee._scaling_factor == 16
 
     def test_read_metadata(self, bumblebee):
         metadata = bumblebee.metadata
@@ -118,6 +123,7 @@ class TestBumbleBee:
             for _ in range(steps):
                 step_function()
                 time.sleep(0.1)
+            print(bumblebee.global_offset, steps * step_size, bumblebee.offset_step_small)
             assert bumblebee.global_offset == steps * step_size
 
     def test_increase_offset_small(self, bumblebee):
@@ -144,6 +150,7 @@ class TestBumbleBee:
     def test_read_attenuation(self, bumblebee):
         for attenuation in bumblebee.properties.attenuation_ratios:
             bumblebee.attenuation = attenuation
+            print(bumblebee.attenuation)
             assert bumblebee.attenuation == attenuation
 
     def test_read_temperature(self, bumblebee):
@@ -215,8 +222,10 @@ class TestFireFly:
 def test_demo_script(monkeypatch, bumblebee: BumbleBee2kV) -> None:
     def mockwrite(data: bytes) -> None:
         pass
+
     def mockexpect(expected: list[bytes]) -> None:
         print(f"Expecting {expected}")
+
     info = io.StringIO()
     monkeypatch.setattr(bumblebee._interface, "write", mockwrite)
     monkeypatch.setattr(bumblebee, "_expect", mockexpect)

@@ -151,7 +151,6 @@ def find_power_supplies() -> dict[str, list[PowerSupplyType]]:
     return {'USB': _find_power_supplies_usb(), 'LAN': _find_power_supplies_lan()}
 
 
-
 if __name__ == "__main__":
     print(find_power_supplies())
 

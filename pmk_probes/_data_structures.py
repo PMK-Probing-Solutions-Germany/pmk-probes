@@ -16,6 +16,7 @@ def _batched_string(string: bytes, batch_size: int):
         yield string[i:i + batch_size]
 
 
+
 class UserMapping:
     """ Maps between 'end user' display values and internal descriptors. It is defined using a dictionary that maps
     from user values to descriptors. """
@@ -77,7 +78,6 @@ UUIDs = UserMapping({
 class PMKProbeProperties(NamedTuple):
     input_voltage_range: tuple[float, float]  # (lower, upper)
     attenuation_ratios: UserMapping  # tuple of all selectable attenuation ratios, descending order
-    scaling_factor: float | None  # factor used when interpreting 2-byte short values as decimal values
 
 
 @dataclass
@@ -174,6 +174,7 @@ class FireFlyMetadata(PMKMetadata):
     """ FireFly has special metadata because it has at least one more field than all other PMK probes. """
 
     propagation_delay: float
+    # notation for metadata maps is "name: (address, length)"
     metadata_map_v11 = {
         "eeprom_layout_revision": (0x04, 3),
         "serial_number": (0x07, 4),

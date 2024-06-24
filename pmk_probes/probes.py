@@ -38,6 +38,9 @@ class _PMKProbe(PMKDevice, metaclass=ABCMeta):
         self.channel = channel
         self._validate_probe(power_supply, channel, allow_legacy)
 
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+
     def __repr__(self):
         return f"{self.probe_model} at {self.channel.name} of {self.power_supply}"
 
@@ -123,23 +126,25 @@ class _BumbleBee(_PMKProbe, metaclass=ABCMeta):
         {"no overload": 0, "positive overload": 1, "negative overload": 2, "main overload": 4})
     _legacy_model_name = "BumbleBee"
 
-    def __init__(self, power_supply: _PMKPowerSupply, channel: Channel, verbose: bool = False,
-                 allow_legacy: bool = True):
-        super().__init__(power_supply, channel, verbose, allow_legacy)
-        if self.metadata.software_revision == "1.0":
-            # TODO: this will not work / throw an error, need to rework properties
-            self.properties.scaling_factor = 16  # BumbleBee firmware 1.0 uses a different scaling factor
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.metadata.software_revision == "M1.0 K0.0":
+            self._scaling_factor = 16  # BumbleBee firmware 1.0 uses a different scaling factor
+
+    def __init_subclass__(cls, scaling_factor, **kwargs):
+        cls._scaling_factor = scaling_factor
+        super().__init_subclass__(**kwargs)
 
     def _read_float(self, setting_address: int):
-        return _bytes_to_decimal(self.properties.scaling_factor, self._setting_read_raw(setting_address, 2))
+        return _bytes_to_decimal(self._scaling_factor, self._setting_read_raw(setting_address, 2))
 
     def _write_float(self, value, setting_address, executing_command_address):
         def min_max_signed_int(n):
             val = 2 ** (n * 8 - 1)
-            return math.ceil(-val / self.properties.scaling_factor), (val - 1) // self.properties.scaling_factor
+            return math.ceil(-val / self._scaling_factor), (val - 1) // self._scaling_factor
 
         try:
-            byte = _decimal_to_byte(self.properties.scaling_factor, value, 2)
+            byte = _decimal_to_byte(self._scaling_factor, value, 2)
             self._setting_write(setting_address, byte)
         except OverflowError as e:
             raise ValueError(f"Value {value} is out of range for this setting. Value must be in range"
@@ -371,7 +376,7 @@ class _BumbleBee(_PMKProbe, metaclass=ABCMeta):
         self._executing_command(0x0403)
 
 
-class BumbleBee2kV(_BumbleBee):
+class BumbleBee2kV(_BumbleBee, scaling_factor=16):
     """
     Class for controlling PMK BumbleBee probes with ±2000 V input voltage. See http://www.pmk.de/en/en/bumblebee for
     specifications.
@@ -380,11 +385,10 @@ class BumbleBee2kV(_BumbleBee):
     @property
     def properties(self) -> PMKProbeProperties:
         return PMKProbeProperties(input_voltage_range=(-2000, +2000),
-                                  attenuation_ratios=UserMapping({500: 1, 250: 2, 100: 3, 50: 4}),
-                                  scaling_factor=16)
+                                  attenuation_ratios=UserMapping({500: 1, 250: 2, 100: 3, 50: 4}))
 
 
-class BumbleBee1kV(_BumbleBee):
+class BumbleBee1kV(_BumbleBee, scaling_factor=32):
     """
     Class for controlling PMK BumbleBee probes with ±1000 V input voltage. See http://www.pmk.de/en/en/bumblebee for
     specifications.
@@ -393,11 +397,10 @@ class BumbleBee1kV(_BumbleBee):
     @property
     def properties(self) -> PMKProbeProperties:
         return PMKProbeProperties(input_voltage_range=(-1000, +1000),
-                                  attenuation_ratios=UserMapping({250: 1, 125: 2, 50: 3, 25: 4}),
-                                  scaling_factor=32)
+                                  attenuation_ratios=UserMapping({250: 1, 125: 2, 50: 3, 25: 4}))
 
 
-class BumbleBee400V(_BumbleBee):
+class BumbleBee400V(_BumbleBee, scaling_factor=80):
     """
     Class for controlling PMK BumbleBee probes with ±400 V input voltage. See http://www.pmk.de/en/en/bumblebee for
     specifications.
@@ -406,11 +409,10 @@ class BumbleBee400V(_BumbleBee):
     @property
     def properties(self) -> PMKProbeProperties:
         return PMKProbeProperties(input_voltage_range=(-400, +400),
-                                  attenuation_ratios=UserMapping({100: 1, 50: 2, 20: 3, 10: 4}),
-                                  scaling_factor=80)
+                                  attenuation_ratios=UserMapping({100: 1, 50: 2, 20: 3, 10: 4}))
 
 
-class BumbleBee200V(_BumbleBee):
+class BumbleBee200V(_BumbleBee, scaling_factor=160):
     """
     Class for controlling PMK BumbleBee probes with ±200 V input voltage. See http://www.pmk.de/en/en/bumblebee for
     specifications.
@@ -419,11 +421,10 @@ class BumbleBee200V(_BumbleBee):
     @property
     def properties(self) -> PMKProbeProperties:
         return PMKProbeProperties(input_voltage_range=(-200, +200),
-                                  attenuation_ratios=UserMapping({50: 1, 25: 2, 10: 3, 5: 4}),
-                                  scaling_factor=160)
+                                  attenuation_ratios=UserMapping({50: 1, 25: 2, 10: 3, 5: 4}))
 
 
-class Hornet4kV(_BumbleBee):
+class Hornet4kV(_BumbleBee, scaling_factor=8):
     """
     Class for controlling PMK Hornet probes with ±4000 V. See http://www.pmk.de/en/home for specifications.
     """
@@ -431,8 +432,7 @@ class Hornet4kV(_BumbleBee):
     @property
     def properties(self) -> PMKProbeProperties:
         return PMKProbeProperties(input_voltage_range=(-4000, +4000),
-                                  attenuation_ratios=UserMapping({1000: 1, 500: 2, 200: 3, 100: 4}),
-                                  scaling_factor=8)
+                                  attenuation_ratios=UserMapping({1000: 1, 500: 2, 200: 3, 100: 4}))
 
 
 class _HSDP(_PMKProbe, metaclass=ABCMeta):
@@ -463,8 +463,7 @@ class HSDP2010(_HSDP):
     @property
     def properties(self) -> PMKProbeProperties:
         return PMKProbeProperties(input_voltage_range=(-10, +10),
-                                  attenuation_ratios=UserMapping({10: 1}),
-                                  scaling_factor=None)
+                                  attenuation_ratios=UserMapping({10: 1}))
 
 
 class HSDP2010L(HSDP2010):
@@ -477,8 +476,7 @@ class HSDP2025(_HSDP):
     @property
     def properties(self) -> PMKProbeProperties:
         return PMKProbeProperties(input_voltage_range=(-25, +25),
-                                  attenuation_ratios=UserMapping({25: 1}),
-                                  scaling_factor=None)
+                                  attenuation_ratios=UserMapping({25: 1}))
 
 
 class HSDP2025L(HSDP2025):
@@ -491,8 +489,7 @@ class HSDP2050(_HSDP):
     @property
     def properties(self) -> PMKProbeProperties:
         return PMKProbeProperties(input_voltage_range=(-50, +50),
-                                  attenuation_ratios=UserMapping({50: 1}),
-                                  scaling_factor=None)
+                                  attenuation_ratios=UserMapping({50: 1}))
 
 
 class HSDP4010(_HSDP):
@@ -501,8 +498,7 @@ class HSDP4010(_HSDP):
     @property
     def properties(self) -> PMKProbeProperties:
         return PMKProbeProperties(input_voltage_range=(-10, +10),
-                                  attenuation_ratios=UserMapping({10: 1}),
-                                  scaling_factor=None)
+                                  attenuation_ratios=UserMapping({10: 1}))
 
 
 class FireFly(_PMKProbe):
@@ -524,8 +520,7 @@ class FireFly(_PMKProbe):
     @property
     def properties(self) -> PMKProbeProperties:
         return PMKProbeProperties(input_voltage_range=(-1, +1),
-                                  attenuation_ratios=UserMapping({1: 1}),
-                                  scaling_factor=None)
+                                  attenuation_ratios=UserMapping({1: 1}))
 
     @lru_cache
     def _read_metadata(self) -> FireFlyMetadata:
