@@ -18,8 +18,8 @@ def _unsigned_to_bytes(command: int, length: int) -> bytes:
     return command.to_bytes(signed=False, byteorder="big", length=length)
 
 
-def _bytes_to_decimal(scale: float, byte_pair: bytes) -> float:
-    return int.from_bytes(byte_pair, byteorder="big", signed=True) / scale
+def _bytes_to_decimal(scale: float, word: bytes) -> float:
+    return int.from_bytes(word, byteorder="big", signed=True) / scale
 
 
 def _decimal_to_byte(scale: float, decimal: float, length: int) -> bytes:

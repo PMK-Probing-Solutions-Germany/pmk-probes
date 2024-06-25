@@ -1,9 +1,11 @@
 import configparser
+import datetime
 import re
 import sys
 
 import pytest
 
+from pmk_probes._data_structures import PMKMetadata
 from pmk_probes._hardware_interfaces import HardwareInterface
 from pmk_probes.power_supplies import PS03, _PMKPowerSupply
 from pmk_probes.probes import *
@@ -88,6 +90,27 @@ def mock_communication(monkeypatch):
     monkeypatch.setattr(HardwareInterface, "read", mock_read)
 
 
+def metadata_factory(probe_model: str, old_variant) -> bytes:
+    if old_variant:
+        sw_rev = "1.0"
+    else:
+        sw_rev = "1.2"  # something other than 1.0
+    mock_probe_metadata = PMKMetadata(
+        eeprom_layout_revision="1.2",
+        serial_number="0000",
+        manufacturer="http://www.pmk.de",
+        model="MockProbe",
+        description="probe for unit-tests",
+        production_date=datetime.datetime.now().date(),
+        calibration_due_date=(datetime.datetime.now() + datetime.timedelta(days=365)).date(),
+        calibration_instance="PMK",
+        hardware_revision="M1.0 K0.7",
+        software_revision=f"M{sw_rev} K2.4",
+        uuid=UUIDs.get_internal_value(probe_model)
+    )
+    return mock_probe_metadata.to_bytes()
+
+
 @pytest.fixture(autouse=USE_MOCK)
 def mock_response(monkeypatch):
     registers = {}
@@ -97,21 +120,20 @@ def mock_response(monkeypatch):
         sw_revision = "1.0"
         match wr_rd, i2c_address, command, payload:
             case "RD", 0x04, 0x00, _:
-                a = ((b'1.2\n'
-                      b'0008\n'
-                      b'http://www.pmk.de\n'
-                      b'MockProbe\n'
-                      b'High voltage probe system\n'
-                      b'20240620\n'
-                      b'20250620\n'
-                      b'PMK\n'
-                      b'M7.2 K5.0\n') +
-                     f"M{sw_revision} K0.0\n".encode() +
-                     f"{UUIDs.get_internal_value(self.probe_model):?<20}\n".encode() +
-                     b'\n\n???????????????????????????????????????????????????????????????????????????????????????????'
-                     b'???????????????????????????????????')
-                print(a)
-                return a
+                # a = ((b'1.2\n'
+                #       b'0008\n'
+                #       b'http://www.pmk.de\n'
+                #       b'MockProbe\n'
+                #       b'High voltage probe system\n'
+                #       b'20240620\n'
+                #       b'20250620\n'
+                #       b'PMK\n'
+                #       b'M7.2 K5.0\n') +
+                #      f"M{sw_revision} K0.0\n".encode() +
+                #      f"{UUIDs.get_internal_value(self.probe_model):?<20}\n".encode() +
+                #      b'\n\n???????????????????????????????????????????????????????????????????????????????????????????'
+                #      b'???????????????????????????????????')
+                return metadata_factory(self.probe_model, old_variant=True)
             case "WR", 0x04, command, payload:
                 registers[command] = payload
                 return None

@@ -5,7 +5,9 @@ class TestPMKPowerSupply:
     def test_num_channels(self, ps):
         assert ps._num_channels in (2, 4)
 
-    def test_close(self, ps):
+    def test_open_close(self, ps):
+        ps._interface.open()
+        assert ps._interface.is_open is True
         ps.close()
         assert ps._interface.is_open is False
 

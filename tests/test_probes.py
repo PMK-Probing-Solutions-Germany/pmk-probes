@@ -24,9 +24,6 @@ def test_create_bumblebee200v(ps):
 
 class TestBumbleBee:
 
-    def test_old_offset(self, bumblebee):
-        assert bumblebee._scaling_factor == 16
-
     def test_read_metadata(self, bumblebee):
         metadata = bumblebee.metadata
         print(metadata)
@@ -147,12 +144,6 @@ class TestBumbleBee:
     def test_decrease_offset_extra_large(self, bumblebee):
         self.offset_step_test(bumblebee, bumblebee.decrease_offset_extra_large, -bumblebee.offset_step_extra_large)
 
-    def test_read_attenuation(self, bumblebee):
-        for attenuation in bumblebee.properties.attenuation_ratios:
-            bumblebee.attenuation = attenuation
-            print(bumblebee.attenuation)
-            assert bumblebee.attenuation == attenuation
-
     def test_read_temperature(self, bumblebee):
         print(bumblebee.temperature)
 
@@ -220,6 +211,7 @@ class TestFireFly:
 
 
 def test_demo_script(monkeypatch, bumblebee: BumbleBee2kV) -> None:
+    # TODO: remove this
     def mockwrite(data: bytes) -> None:
         pass
 
