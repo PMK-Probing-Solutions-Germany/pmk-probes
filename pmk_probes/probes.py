@@ -277,13 +277,13 @@ class _BumbleBee(_PMKProbe, metaclass=ABCMeta):
         self._setting_write(0x012F, _unsigned_to_bytes(int(value), 1))
         self._executing_command(0x0A05)
 
-    @property
-    def overload_buzzer_enabled(self):
-        return self._setting_read_bool(0x012D)
-
-    @property
-    def hold_overload(self):
-        return self._setting_read_bool(0x012D, 0)
+    # @property
+    # def overload_buzzer_enabled(self):
+    #     return self._setting_read_bool(0x012D)
+    #
+    # @property
+    # def hold_overload(self):
+    #     return self._setting_read_bool(0x012D, 0)
 
     @property
     def overload_positive_counter(self) -> int:
