@@ -85,7 +85,6 @@ class PMKDevice:
         """
         for expected_byte in expected:
             answer = self._interface.read(len(expected_byte))
-            print(answer, expected_byte)
             if answer != expected_byte:
                 raise ProbeReadError(f"Got {answer} instead of {expected_byte}.")
         return None

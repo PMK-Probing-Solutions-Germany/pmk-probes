@@ -12,11 +12,15 @@ from pmk_probes.probes import *
 
 config = configparser.ConfigParser()
 config.read("config.ini")
-USE_MOCK = config.getboolean("general", "use_mock")
+MOCK_ONLY = config.getboolean("general", "mock_only")
+
+
+def probe_class_from_name(name: str) -> type:
+    return getattr(sys.modules[__name__], name)
 
 
 def probe_class_from_config(section: str) -> type:
-    return getattr(sys.modules[__name__], config.get(section, "type"))
+    return probe_class_from_name(config.get(section, "type"))
 
 
 def probe_factory(section: str, ps: _PMKPowerSupply) -> ProbeType:
@@ -26,6 +30,11 @@ def probe_factory(section: str, ps: _PMKPowerSupply) -> ProbeType:
         verbose=True,
         allow_legacy=config.getboolean(section, "allow_legacy")
     )
+
+
+@pytest.fixture
+def get_config():
+    return probe_class_from_config("devices.BumbleBee")
 
 
 @pytest.fixture(params=config.items(section="devices.PS.connection"))
@@ -66,7 +75,7 @@ def firefly(ps):
     ff.probe_head_on = False
 
 
-@pytest.fixture(autouse=USE_MOCK)
+@pytest.fixture(autouse=False)
 def mock_communication(monkeypatch):
     sent = []
     return_buffer = bytearray()
@@ -90,7 +99,7 @@ def mock_communication(monkeypatch):
     monkeypatch.setattr(HardwareInterface, "read", mock_read)
 
 
-def metadata_factory(probe_model: str, old_variant) -> bytes:
+def metadata_factory(probe_model: str, old_variant: bool) -> bytes:
     if old_variant:
         sw_rev = "1.0"
     else:
@@ -100,7 +109,7 @@ def metadata_factory(probe_model: str, old_variant) -> bytes:
         serial_number="0000",
         manufacturer="http://www.pmk.de",
         model="MockProbe",
-        description="probe for unit-tests",
+        description="probe for unit tests",
         production_date=datetime.datetime.now().date(),
         calibration_due_date=(datetime.datetime.now() + datetime.timedelta(days=365)).date(),
         calibration_instance="PMK",
@@ -111,28 +120,21 @@ def metadata_factory(probe_model: str, old_variant) -> bytes:
     return mock_probe_metadata.to_bytes()
 
 
-@pytest.fixture(autouse=USE_MOCK)
-def mock_response(monkeypatch):
+if MOCK_ONLY:
+    mock_params = [True]
+else:
+    mock_params = [True, False]  # run tests with and without mock query
+
+
+@pytest.fixture(params=mock_params)
+def mockable(request, monkeypatch):
     registers = {}
 
     def mock_query(self, wr_rd: Literal["WR", "RD"], i2c_address: int, command: int, payload: bytes = None,
                    length: int = 0xFF) -> bytes | None:
-        sw_revision = "1.0"
+        nonlocal registers
         match wr_rd, i2c_address, command, payload:
             case "RD", 0x04, 0x00, _:
-                # a = ((b'1.2\n'
-                #       b'0008\n'
-                #       b'http://www.pmk.de\n'
-                #       b'MockProbe\n'
-                #       b'High voltage probe system\n'
-                #       b'20240620\n'
-                #       b'20250620\n'
-                #       b'PMK\n'
-                #       b'M7.2 K5.0\n') +
-                #      f"M{sw_revision} K0.0\n".encode() +
-                #      f"{UUIDs.get_internal_value(self.probe_model):?<20}\n".encode() +
-                #      b'\n\n???????????????????????????????????????????????????????????????????????????????????????????'
-                #      b'???????????????????????????????????')
                 return metadata_factory(self.probe_model, old_variant=True)
             case "WR", 0x04, command, payload:
                 registers[command] = payload
@@ -140,4 +142,7 @@ def mock_response(monkeypatch):
             case "RD", 0x04, command, _:
                 return registers.get(command)
 
-    monkeypatch.setattr(PMKDevice, "_query", mock_query)
+    if request.param:
+        monkeypatch.setattr(PMKDevice, "_query", mock_query)
+    else:
+        pass

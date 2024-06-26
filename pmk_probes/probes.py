@@ -44,7 +44,7 @@ class _PMKProbe(PMKDevice, metaclass=ABCMeta):
     def __repr__(self):
         return f"{self.probe_model} at {self.channel.name} of {self.power_supply}"
 
-    def _validate_probe(self, power_supply, channel, allow_legacy):
+    def _validate_probe(self, power_supply: _PMKPowerSupply, channel: Channel, allow_legacy: bool):
         if self.__class__ not in power_supply.supported_probe_types:
             raise ValueError(f"Probe {self.probe_model} is not supported by this power supply.")
         if channel.value >= power_supply._num_channels + 1:

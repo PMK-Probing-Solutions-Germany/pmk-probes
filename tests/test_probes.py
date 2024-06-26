@@ -1,7 +1,5 @@
-import io
 import time
 from collections import deque
-from contextlib import redirect_stdout
 from math import isclose
 
 import numpy as np
@@ -11,28 +9,27 @@ from pmk_probes._devices import Channel
 from pmk_probes._errors import ProbeTypeError
 from pmk_probes.probes import BumbleBee2kV, FireFly, LED, BumbleBee200V
 
+parameter_list = lambda prefix: [(f"{prefix}crease_offset_{func_name}", f"offset_step_{func_name}")
+                                 for func_name in ["small", "large", "extra_large"]]
+
 
 def test_create_bumblebee_at_ps_ch(ps):
     with pytest.raises(ProbeTypeError):
         _ = BumbleBee2kV(ps, channel=Channel.PS_CH)
 
 
-def test_create_bumblebee200v(ps):
+def test_create_bumblebee200v(ps, get_config):
     with pytest.raises(ProbeTypeError):
-        _ = BumbleBee200V(ps, channel=Channel.PS_CH)
+        _ = BumbleBee200V(ps, channel=Channel.CH1)
 
 
-class TestBumbleBee:
-
+@pytest.mark.usefixtures("mockable")
+class TestBumbleBeeMockable:
     def test_read_metadata(self, bumblebee):
         metadata = bumblebee.metadata
         print(metadata)
         metadata.to_bytes()
         assert metadata is not None
-
-    def test_print_offset(self, bumblebee):
-        bumblebee.global_offset = 500
-        print(bumblebee.global_offset)
 
     def test_global_offset(self, bumblebee):
         for attenuation in bumblebee.properties.attenuation_ratios:
@@ -47,7 +44,7 @@ class TestBumbleBee:
         [("offset_step_small", 0.125),
          ("offset_step_large", 2),
          ("offset_step_extra_large", 200)])
-    def test_offset_step(self, bumblebee, offset_step_attribute, value):
+    def test_set_offset_step(self, bumblebee, offset_step_attribute, value):
         setattr(bumblebee, offset_step_attribute, value)
         assert getattr(bumblebee, offset_step_attribute) == value
 
@@ -60,6 +57,9 @@ class TestBumbleBee:
         for color in BumbleBee2kV._led_colors:
             bumblebee.led_color = color
             assert bumblebee.led_color == color
+
+
+class TestBumbleBee:
 
     def test_overload_positive_counter(self, bumblebee):
         bumblebee.clear_overload_counters()
@@ -93,8 +93,8 @@ class TestBumbleBee:
 
     @pytest.mark.parametrize(
         "step_function_name,amount",
-        [("increase_attenuation", 4),
-         ("decrease_attenuation", -4)])
+        [("increase_attenuation", 1),
+         ("decrease_attenuation", -1)])
     def test_attenuation_step(self, bumblebee, step_function_name, amount):
         """Test the attenuation step functions. The idea is that we start from a known attenuation and then step
          amount times and check if the attenuation is correct."""
@@ -106,13 +106,20 @@ class TestBumbleBee:
                 time.sleep(0.1)
             rotatable = deque(bumblebee.properties.attenuation_ratios.user_to_internal)
             start_index = rotatable.index(start_attenuation)
-            rotatable.rotate(amount)
+            rotatable.rotate(-amount)
             assert bumblebee.attenuation == rotatable[start_index]
 
-    @staticmethod
-    def offset_step_test(bumblebee, step_function, step_size):
+    @pytest.mark.parametrize(
+        "step_function_name,step_size_name",
+        parameter_list("in") + parameter_list("de")
+    )
+    def test_offset_step(self, bumblebee, step_function_name, step_size_name):
         """Test the offset step functions. The idea is that we start from a known offset and then step
          amount times and check if the offset is correct."""
+        step_function = getattr(bumblebee, step_function_name)
+        step_size = getattr(bumblebee, step_size_name)
+        if step_function_name.startswith("de"):
+            step_size = -step_size
         steps = 2
         for attenuation in bumblebee.properties.attenuation_ratios:
             bumblebee.attenuation = attenuation
@@ -122,27 +129,6 @@ class TestBumbleBee:
                 time.sleep(0.1)
             print(bumblebee.global_offset, steps * step_size, bumblebee.offset_step_small)
             assert bumblebee.global_offset == steps * step_size
-
-    def test_increase_offset_small(self, bumblebee):
-        self.offset_step_test(bumblebee, bumblebee.increase_offset_small, bumblebee.offset_step_small)
-
-    def test_decrease_offset_small(self, bumblebee):
-        self.offset_step_test(bumblebee, bumblebee.decrease_offset_small, -bumblebee.offset_step_small)
-
-    def test_increase_offset_large(self, bumblebee):
-        bumblebee.offset_step_large = -2
-        self.offset_step_test(bumblebee, bumblebee.increase_offset_large, bumblebee.offset_step_large)
-
-    def test_decrease_offset_large(self, bumblebee):
-        self.offset_step_test(bumblebee, bumblebee.decrease_offset_large, -bumblebee.offset_step_large)
-
-    def test_increase_offset_extra_large(self, bumblebee):
-        print(bumblebee.offset_step_extra_large)
-        bumblebee.offset_step_extra_large = -7
-        self.offset_step_test(bumblebee, bumblebee.increase_offset_extra_large, bumblebee.offset_step_extra_large)
-
-    def test_decrease_offset_extra_large(self, bumblebee):
-        self.offset_step_test(bumblebee, bumblebee.decrease_offset_extra_large, -bumblebee.offset_step_extra_large)
 
     def test_read_temperature(self, bumblebee):
         print(bumblebee.temperature)
@@ -174,11 +160,13 @@ class TestFireFly:
         firefly.auto_zero()
 
     def test_probe_head_on(self, firefly: FireFly):
-        firefly.probe_head_on = True
-        assert firefly.probe_head_on is True
-
-    def test_probe_head_off(self, firefly: FireFly):
+        firefly.probe_head_on = False
         assert firefly.probe_head_on is False
+
+    @pytest.mark.parametrize("setting", [False, True])
+    def test_probe_head_off(self, firefly: FireFly, setting: bool):
+        firefly.probe_head_on = setting
+        assert firefly.probe_head_on is setting
 
     def test_status(self, firefly: FireFly):
         print(firefly.probe_status_led)
@@ -208,19 +196,3 @@ class TestFireFly:
         on_voltage = firefly.battery_voltage
         assert on_voltage < off_voltage  # battery voltage should drop when probe head is on
         print(f"Off voltage: {off_voltage} V, On voltage: {on_voltage} V")
-
-
-def test_demo_script(monkeypatch, bumblebee: BumbleBee2kV) -> None:
-    # TODO: remove this
-    def mockwrite(data: bytes) -> None:
-        pass
-
-    def mockexpect(expected: list[bytes]) -> None:
-        print(f"Expecting {expected}")
-
-    info = io.StringIO()
-    monkeypatch.setattr(bumblebee._interface, "write", mockwrite)
-    monkeypatch.setattr(bumblebee, "_expect", mockexpect)
-    with redirect_stdout(info):
-        bumblebee.attenuation = 100
-    print(info.getvalue())
