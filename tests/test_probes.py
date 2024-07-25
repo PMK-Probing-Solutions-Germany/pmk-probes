@@ -61,6 +61,16 @@ class TestBumbleBeeMockable:
 
 class TestBumbleBee:
 
+    def test_keylock(self, bumblebee):
+        for setting in [True, False]:
+            bumblebee.keylock = setting
+            assert bumblebee.keylock == setting
+
+    def test_leds_off(self, bumblebee):
+        for setting in [True, False]:
+            bumblebee.leds_off = setting
+            assert bumblebee.leds_off == setting
+
     def test_overload_positive_counter(self, bumblebee):
         bumblebee.clear_overload_counters()
         assert bumblebee.overload_positive_counter == 0
@@ -142,6 +152,7 @@ class TestHSDP:
         # assert setting the offset raises no error, however values can only be confirmed using a DMM as there is no
         # get-method
         hsdp.offset = -10
+        time.sleep(10)
         hsdp.offset = 0
 
     def test_get_offset(self, hsdp):

@@ -104,7 +104,8 @@ class _PMKProbe(PMKDevice, metaclass=ABCMeta):
         pass
 
     def _setting_read_bool(self, setting_address: int, setting_position: int = 0):
-        return bool(self._setting_read_int(setting_address, setting_position + 1))
+        setting = self._setting_read_int(setting_address, 1)
+        return bool(setting & (1 << setting_position))
 
     def _wr_command(self, command: int, i2c_address, payload: bytes) -> None:
         """
@@ -260,6 +261,32 @@ class _BumbleBee(_PMKProbe, metaclass=ABCMeta):
                 f"{list(self._led_colors.keys())}.")
         self._setting_write(0x012C, _unsigned_to_bytes(self._led_colors.get_internal_value(value), 1))
         self._executing_command(0x0305)
+
+    @property
+    def leds_off(self):
+        return self._setting_read_bool(0x0130, setting_position=1)
+
+    @property
+    def keylock(self):
+        return self._setting_read_bool(0x0130, setting_position=0)
+
+    @leds_off.setter
+    def leds_off(self, value: bool):
+        self._setting_write_bool(0x0130, 1, value)
+        self._executing_command(0x0B05)
+
+    @keylock.setter
+    def keylock(self, value: bool):
+        self._setting_write_bool(0x0130, 0, value)
+        self._executing_command(0x0B05)
+
+    def _setting_write_bool(self, address, bit_position, value):
+        current_setting = self._setting_read_int(address, 1)
+        if value:
+            new_setting = current_setting | (1 << bit_position)
+        else:
+            new_setting = current_setting & ~(1 << bit_position)
+        self._setting_write(address, _unsigned_to_bytes(new_setting, 1))
 
     @property
     def offset_sync_enabled(self) -> bool:
