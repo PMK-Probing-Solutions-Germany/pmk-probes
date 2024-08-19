@@ -41,7 +41,10 @@ class _PMKPowerSupply(PMKDevice):
 
     @property
     def _interface(self) -> "HardwareInterface":
-        return self.interface
+        if self._simulated:
+            return self._simulated_interface
+        else:
+            return self.interface
 
     @property
     def connected_probes(self) -> tuple[Any, ...]:

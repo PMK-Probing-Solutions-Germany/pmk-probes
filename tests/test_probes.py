@@ -1,3 +1,4 @@
+import logging
 import time
 from collections import deque
 from math import isclose
@@ -59,17 +60,16 @@ class TestBumbleBeeMockable:
             assert bumblebee.led_color == color
 
 
+@pytest.mark.serial
 class TestBumbleBee:
 
-    def test_keylock(self, bumblebee):
+    @pytest.mark.parametrize(
+        "function_name",
+        ["overload_buzzer", "hold_overload", "keylock", "leds_off"])
+    def test_boolean_settings(self, bumblebee, function_name):
         for setting in [True, False]:
-            bumblebee.keylock = setting
-            assert bumblebee.keylock == setting
-
-    def test_leds_off(self, bumblebee):
-        for setting in [True, False]:
-            bumblebee.leds_off = setting
-            assert bumblebee.leds_off == setting
+            setattr(bumblebee, function_name, setting)
+            assert getattr(bumblebee, function_name) == setting
 
     def test_overload_positive_counter(self, bumblebee):
         bumblebee.clear_overload_counters()
@@ -171,8 +171,13 @@ class TestFireFly:
         firefly.auto_zero()
 
     def test_probe_head_on(self, firefly: FireFly):
-        firefly.probe_head_on = False
-        assert firefly.probe_head_on is False
+        logging.info(f"{firefly.probe_head_on}, {firefly.probe_status_led}")
+        for state in [False, True]:
+            firefly.probe_head_on = state
+            time.sleep(5)
+            assert firefly.probe_head_on is state
+        logging.info(f"{firefly.probe_head_on}, {firefly.probe_status_led}")
+
 
     @pytest.mark.parametrize("setting", [False, True])
     def test_probe_head_off(self, firefly: FireFly, setting: bool):

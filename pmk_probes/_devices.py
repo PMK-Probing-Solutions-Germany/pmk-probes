@@ -1,3 +1,4 @@
+import logging
 from abc import abstractmethod
 from enum import Enum
 from functools import lru_cache
@@ -5,7 +6,7 @@ from typing import Literal
 
 from ._data_structures import PMKMetadata
 from ._errors import ProbeReadError, ProbeConnectionError
-from ._hardware_interfaces import HardwareInterface
+from ._hardware_interfaces import HardwareInterface, EchoInterface
 
 # Constants for communication
 DUMMY = b'\x00'
@@ -38,10 +39,12 @@ class PMKDevice:
     _i2c_addresses: dict[str, int] = None  # addresses of the metadata and offset registers
     _addressing: str = None  # word- or byte-addressing
 
-    def __init__(self, channel: Channel, verbose: bool = False):
+    def __init__(self, channel: Channel, verbose: bool = False, simulated: bool = False):
         self.channel = channel
         self.verbose = verbose
         self._serial_number = None
+        self._simulated = simulated
+        self._simulated_interface = EchoInterface()
 
     @property
     @abstractmethod
@@ -85,7 +88,7 @@ class PMKDevice:
         """
         for expected_byte in expected:
             answer = self._interface.read(len(expected_byte))
-            if answer != expected_byte:
+            if answer != expected_byte and not self._simulated:
                 raise ProbeReadError(f"Got {answer} instead of {expected_byte}.")
         return None
 
@@ -104,8 +107,7 @@ class PMKDevice:
         string += "\x03"
         # write the command
         self._interface.write(string.encode())
-        if self.verbose:
-            print(f"Sent: {string}")
+        logging.info(f"Sent: {string}")
         # read the response and ensure it's correct: (STX, ACK, echo, read_payload, ETX, CR)
         self._expect([STX, ACK, f"{self.channel.value}{cmd}".encode()])
         # read the payload
@@ -116,7 +118,6 @@ class PMKDevice:
         else:
             # no payload is returned for WR commands
             read_payload = None
-        if self.verbose:
-            print(f"Received: {read_payload}")
+        logging.info(f"Received: {read_payload}")
         self._expect([ETX, CR])
         return read_payload

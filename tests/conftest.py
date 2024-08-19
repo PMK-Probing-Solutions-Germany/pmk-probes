@@ -6,7 +6,6 @@ import sys
 import pytest
 
 from pmk_probes._data_structures import PMKMetadata
-from pmk_probes._hardware_interfaces import HardwareInterface
 from pmk_probes.power_supplies import PS03, _PMKPowerSupply
 from pmk_probes.probes import *
 
@@ -53,6 +52,10 @@ def bumblebee(request, ps):
 
 
 @pytest.fixture
+def simulated_bumblebee():
+    yield BumbleBee2kV(power_supply=None, simulated=True)
+
+@pytest.fixture
 def mock_bumblebee(request, mock_response, ps):
     bb: BumbleBeeType = probe_factory(request.param, ps)
     yield bb
@@ -70,9 +73,9 @@ def hsdp(ps):
 @pytest.fixture
 def firefly(ps):
     ff: FireFly = probe_factory("devices.FireFly", ps)
-    ff.probe_head_on = False
+    # ff.probe_head_on = False
     yield ff
-    ff.probe_head_on = False
+    #ff.probe_head_on = False
 
 
 @pytest.fixture(autouse=False)

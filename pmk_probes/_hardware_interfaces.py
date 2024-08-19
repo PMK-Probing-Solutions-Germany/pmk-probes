@@ -87,6 +87,8 @@ class SerialInterface(HardwareInterface):
         return self.ser.is_open
 
 class EchoInterface(HardwareInterface):
+    def __init__(self):
+        super().__init__({})
 
     def _write(self, data: bytes) -> None:
         pass
@@ -95,6 +97,12 @@ class EchoInterface(HardwareInterface):
         pass
 
     def reset_input_buffer(self) -> None:
+        pass
+
+    def close(self) -> None:
+        pass
+
+    def open(self) -> None:
         pass
 
     @property

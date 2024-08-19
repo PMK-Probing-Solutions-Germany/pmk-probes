@@ -33,3 +33,7 @@ version-file = "pmk_probes/_version.py"
 Homepage = "http://www.pmk.de/"
 Documentation = "https://pmk-probes.readthedocs.io/en/latest/"
 Repository = "https://github.com/PMK-Probing-Solutions/pmk-probes"
+
+[tool.pytest.ini_options]
+log_cli = true
+log_cli_level = "INFO"

@@ -2,7 +2,6 @@
 supplies"""
 
 import math
-import time
 from abc import ABCMeta, abstractmethod
 from enum import Enum
 from functools import lru_cache
@@ -11,6 +10,7 @@ from typing import Literal, TypeVar, cast
 from ._data_structures import UUIDs, UserMapping, FireFlyMetadata, PMKProbeProperties, LED
 from ._devices import PMKDevice, Channel, DUMMY
 from ._errors import ProbeTypeError, UUIDReadError
+from ._hardware_interfaces import HardwareInterface
 from .power_supplies import _PMKPowerSupply
 
 
@@ -31,12 +31,14 @@ class _PMKProbe(PMKDevice, metaclass=ABCMeta):
     _legacy_model_name = None  # model name of the probe in legacy mode
 
     def __init__(self, power_supply: _PMKPowerSupply, channel: Channel, verbose: bool = False,
-                 allow_legacy: bool = True):
+                 allow_legacy: bool = True, simulated: bool = False):
         super().__init__(channel, verbose=verbose)
         self.probe_model = self.__class__.__name__
         self.power_supply = power_supply
         self.channel = channel
-        self._validate_probe(power_supply, channel, allow_legacy)
+        self._simulated = simulated
+        if not simulated:
+            self._validate_probe(power_supply, channel, allow_legacy)
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
@@ -77,8 +79,11 @@ class _PMKProbe(PMKDevice, metaclass=ABCMeta):
         return metadata_value == expected_value
 
     @property
-    def _interface(self):
-        return self.power_supply.interface
+    def _interface(self) -> HardwareInterface:
+        if self._simulated:
+            return self._simulated_interface
+        else:
+            return self.power_supply.interface
 
     @property
     def _uuid(self):
@@ -264,11 +269,11 @@ class _BumbleBee(_PMKProbe, metaclass=ABCMeta):
 
     @property
     def leds_off(self):
-        return self._setting_read_bool(0x0130, setting_position=1)
+        return self._setting_read_bool(0x0130, 1)
 
     @property
     def keylock(self):
-        return self._setting_read_bool(0x0130, setting_position=0)
+        return self._setting_read_bool(0x0130, 0)
 
     @leds_off.setter
     def leds_off(self, value: bool):
@@ -280,13 +285,46 @@ class _BumbleBee(_PMKProbe, metaclass=ABCMeta):
         self._setting_write_bool(0x0130, 0, value)
         self._executing_command(0x0B05)
 
+    @property
+    def overload_buzzer(self):
+        """
+        Read or write the overload buzzer setting. If set to True, the buzzer will sound whenever an overload is
+        active, otherwise buzzer is disabled.
+
+        :getter: Returns the overload buzzer setting.
+        :setter: Sets the overload buzzer setting.
+        """
+        return self._setting_read_bool(0x012D, 0)
+
+    @property
+    def hold_overload(self):
+        """
+        Read or write the hold overload setting. If set to True, overload will be held until hold overload is
+        disabled. If set to False, overload is only shown as long as the probe is overloaded.
+
+        :getter: Returns the hold overload setting.
+        :setter: Sets the hold overload setting.
+        """
+        return self._setting_read_bool(0x012D, 1)
+
+    @overload_buzzer.setter
+    def overload_buzzer(self, value: bool):
+        self._setting_write_bool(0x012D, 0, value)
+        self._executing_command(0x0A05)
+
+    @hold_overload.setter
+    def hold_overload(self, value: bool):
+        self._setting_write_bool(0x012D, 1, value)
+        self._executing_command(0x0A05)
+
     def _setting_write_bool(self, address, bit_position, value):
-        current_setting = self._setting_read_int(address, 1)
+        setting = self._setting_read_int(address, 1)
+        mask = 1 << bit_position
         if value:
-            new_setting = current_setting | (1 << bit_position)
+            setting |= mask
         else:
-            new_setting = current_setting & ~(1 << bit_position)
-        self._setting_write(address, _unsigned_to_bytes(new_setting, 1))
+            setting &= ~mask
+        self._setting_write(address, _unsigned_to_bytes(setting, 1))
 
     @property
     def offset_sync_enabled(self) -> bool:
@@ -642,14 +680,7 @@ class FireFly(_PMKProbe):
 
     @probe_head_on.setter
     def probe_head_on(self, value: bool) -> None:
-        if self.probe_head_on != value:
-            self._wr_command(0x0803, self._i2c_addresses['unified'], DUMMY)
-            timeout = time.time() + 5
-            sleep_time = 0.1
-            while self.probe_head_on != value and time.time() < timeout:
-                time.sleep(sleep_time)
-        else:
-            pass  # no need to do anything if the probe head is already in the desired state
+        self._wr_command(0x0A30, self._i2c_addresses['unified'], _unsigned_to_bytes(int(value), 1))
 
     def auto_zero(self) -> None:
         """
