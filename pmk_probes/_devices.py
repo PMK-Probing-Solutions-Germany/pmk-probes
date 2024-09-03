@@ -27,6 +27,10 @@ class Channel(Enum):
     CH2 = 2  # the second channel
     CH3 = 3  # the third channel (PS03 only)
     CH4 = 4  # the fourth channel (PS03 only)
+    CH5 = 5  # the fifth channel (PS08 only)
+    CH6 = 6  # the fourth channel (PS08 only)
+    CH7 = 7  # the third channel (PS08 only)
+    CH8 = 8  # the fourth channel (PS08 only)
     PS_CH = 0  # the PS's channel (internal use only)
 
 

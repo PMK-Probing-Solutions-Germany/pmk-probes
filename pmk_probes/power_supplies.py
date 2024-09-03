@@ -92,6 +92,11 @@ class PS03(_PMKPowerSupply):
     _num_channels = 4  # the PS03 has 4 channels
 
 
+class PS08(_PMKPowerSupply):
+    """Class to control a PS03 power supply."""
+    _num_channels = 8  # the PS03 has 4 channels
+
+
 def _auto_ps(model=None, **kwargs) -> PowerSupplyType:
     """Automatically find a power supply and return it."""
     if not model:
@@ -103,6 +108,8 @@ def _auto_ps(model=None, **kwargs) -> PowerSupplyType:
             return PS02(**kwargs)
         case "PS-03":
             return PS03(**kwargs)
+        case "PS-08":
+            return PS08(**kwargs)
         case _:
             raise ValueError("Unknown model")
 
