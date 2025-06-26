@@ -389,6 +389,13 @@ class _BumbleBee(_PMKProbe, metaclass=ABCMeta):
         """
         return self._setting_read_int(0x0142, 2) / 5 - 50
 
+    @property
+    def metadata_write_protection_password(self):
+        return self._setting_read_raw(0x01AD, 2)
+
+    def unlock_eeprom(self):
+        self._setting_write(0x01AD, b"\x19\x93")
+
     # All the following methods represent keys on the BumbleBee keyboard
 
     def clear_overload_counters(self) -> None:
