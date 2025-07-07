@@ -27,10 +27,10 @@ class Channel(Enum):
     CH2 = 2  # the second channel
     CH3 = 3  # the third channel (PS03 only)
     CH4 = 4  # the fourth channel (PS03 only)
-    CH5 = 5  # the fifth channel (PS08 only)
-    CH6 = 6  # the fourth channel (PS08 only)
-    CH7 = 7  # the third channel (PS08 only)
-    CH8 = 8  # the fourth channel (PS08 only)
+    CH5 = 5  # the fifth channel (PS03 only)
+    CH6 = 6  # the sixth channel (PS08 only)
+    CH7 = 7  # the seventh channel (PS08 only)
+    CH8 = 8  # the eigth channel (PS08 only)
     PS_CH = 0  # the PS's channel (internal use only)
 
 
@@ -54,7 +54,8 @@ class PMKDevice:
     @abstractmethod
     def _interface(self) -> "HardwareInterface":
         """
-        The interface to the device.
+        The interface to the device. DO NOT USE (unless absolutely necessary), in 99.99% of the cases _query(...) should
+         be used instead.
         """
         raise NotImplementedError
 
@@ -77,7 +78,7 @@ class PMKDevice:
             metadata = self._read_metadata()
             self._serial_number = metadata.serial_number
             return metadata
-        except Exception as e:
+        except ValueError as e:
             raise ProbeConnectionError(f"{e.args[0]} Could not read metadata from {repr(self)}.") \
                 from e
 
@@ -103,6 +104,8 @@ class PMKDevice:
         Returns:
             The response as a bytes object.
         """
+        if wr_rd != "RD" and not payload:
+            return None  # don't try to send an empty payload
         self._interface.reset_input_buffer()  # Clear input buffer in case it wasn't empty
         cmd = f"{command:04X}{length:02X}"
         string = f"\x02{wr_rd}{self.channel.value}{i2c_address:02X}{self._addressing}{cmd}"

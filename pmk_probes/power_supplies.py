@@ -56,10 +56,10 @@ class _PMKPowerSupply(PMKDevice):
             # for every channel, query the probe for its metadata
             for ProbeType in to_try:
                 try:
-                    detected_probe = ProbeType(self, channel, allow_legacy=True)
+                    detected_probe = ProbeType(self, channel, allow_legacy=False)
                     connected_probes.append(detected_probe)
                     break
-                except (ProbeReadError, ProbeConnectionError):
+                except (ProbeReadError, ProbeConnectionError, KeyError):
                     continue
         return tuple(connected_probes)
 
@@ -93,16 +93,20 @@ class PS03(_PMKPowerSupply):
 
 
 class PS08(_PMKPowerSupply):
-    """Class to control a PS03 power supply."""
-    _num_channels = 8  # the PS03 has 4 channels
+    """Class to control a PS08 power supply."""
+    _num_channels = 8  # the PS08 has 8 channels
 
 
 def _auto_ps(model=None, **kwargs) -> PowerSupplyType:
     """Automatically find a power supply and return it."""
     if not model:
         model_getter_ps = PS03(**kwargs)
-        model = model_getter_ps.metadata.model
-        model_getter_ps.close()
+        try:
+            model = model_getter_ps.metadata.model
+            model_getter_ps.close()
+        except ProbeConnectionError:
+            raise ProbeConnectionError(f"Couldn't open connection power supply with details {kwargs}. "
+                                       f"Is it in use by another program?")
     match model:
         case "PS-02":
             return PS02(**kwargs)
@@ -111,7 +115,7 @@ def _auto_ps(model=None, **kwargs) -> PowerSupplyType:
         case "PS-08":
             return PS08(**kwargs)
         case _:
-            raise ValueError("Unknown model")
+            raise ValueError(f"Unknown model {model}")
 
 
 def _find_power_supplies_usb() -> list[PowerSupplyType]:

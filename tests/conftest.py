@@ -5,7 +5,6 @@ import sys
 
 import pytest
 
-from pmk_probes._data_structures import PMKMetadata
 from pmk_probes.power_supplies import PS03, _PMKPowerSupply
 from pmk_probes.probes import *
 
@@ -22,12 +21,18 @@ def probe_class_from_config(section: str) -> type:
     return probe_class_from_name(config.get(section, "type"))
 
 
-def probe_factory(section: str, ps: _PMKPowerSupply) -> ProbeType:
-    return probe_class_from_config(section)(
+def probe_factory(section: str, ps: _PMKPowerSupply) -> ProbeType | None:
+    try:
+        probe_class = probe_class_from_config(section)
+    except configparser.NoSectionError:
+        pytest.skip("No section %s" % section)
+        return None
+    return probe_class(
         ps,
         Channel(config.getint(section, "channel")),
         verbose=True,
-        allow_legacy=config.getboolean(section, "allow_legacy")
+        allow_legacy=config.getboolean(section, "allow_legacy"),
+        skip_metadata=config.getboolean(section, "skip_metadata")
     )
 
 
@@ -75,7 +80,12 @@ def firefly(ps):
     ff: FireFly = probe_factory("devices.FireFly", ps)
     # ff.probe_head_on = False
     yield ff
-    #ff.probe_head_on = False
+
+
+@pytest.fixture
+def power_over_fiber(ps):
+    pof: PowerOverFiber = probe_factory("devices.PowerOverFiber", ps)
+    yield pof
 
 
 @pytest.fixture(autouse=False)
@@ -144,6 +154,7 @@ def mockable(request, monkeypatch):
                 return None
             case "RD", 0x04, command, _:
                 return registers.get(command)
+        return None
 
     if request.param:
         monkeypatch.setattr(PMKDevice, "_query", mock_query)

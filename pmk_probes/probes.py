@@ -1,13 +1,17 @@
 """ This module contains classes for controlling PMK probes. The classes are designed to be used with PMK power
 supplies"""
-
+import io
 import math
+import time
+from _datetime import timedelta
 from abc import ABCMeta, abstractmethod
 from enum import Enum
 from functools import lru_cache
-from typing import Literal, TypeVar, cast
+from inspect import isabstract
+from pathlib import Path
+from typing import Literal, TypeVar, cast, Callable
 
-from ._data_structures import UUIDs, UserMapping, FireFlyMetadata, PMKProbeProperties, LED
+from ._data_structures import UUIDs, UserMapping, FireFlyMetadata, PMKProbeProperties, LED, PowerOverFiberMetadata
 from ._devices import PMKDevice, Channel, DUMMY
 from ._errors import ProbeTypeError, UUIDReadError
 from ._hardware_interfaces import HardwareInterface
@@ -22,6 +26,10 @@ def _bytes_to_decimal(scale: float, word: bytes) -> float:
     return int.from_bytes(word, byteorder="big", signed=True) / scale
 
 
+def _to_two_bytes_unsigned(command: int) -> bytes:
+    return _unsigned_to_bytes(command, 2)
+
+
 def _decimal_to_byte(scale: float, decimal: float, length: int) -> bytes:
     integer = int(decimal * scale)
     return integer.to_bytes(signed=True, byteorder="big", length=length)
@@ -31,13 +39,14 @@ class _PMKProbe(PMKDevice, metaclass=ABCMeta):
     _legacy_model_name = None  # model name of the probe in legacy mode
 
     def __init__(self, power_supply: _PMKPowerSupply, channel: Channel, verbose: bool = False,
-                 allow_legacy: bool = True, simulated: bool = False):
+                 allow_legacy: bool = False,
+                 simulated=None, skip_metadata=False):
         super().__init__(channel, verbose=verbose)
         self.probe_model = self.__class__.__name__
         self.power_supply = power_supply
         self.channel = channel
         self._simulated = simulated
-        if not simulated:
+        if not simulated and not skip_metadata:
             self._validate_probe(power_supply, channel, allow_legacy)
 
     def __init_subclass__(cls, **kwargs):
@@ -93,38 +102,32 @@ class _PMKProbe(PMKDevice, metaclass=ABCMeta):
         else:
             raise ProbeTypeError("Probe model has no UUID assigned.")
 
-    def _write_float(self, value, setting_address, executing_command_address):
-        raise NotImplementedError
-
     def _setting_write(self, setting_address: int, setting_value: bytes):
-        self._wr_command(setting_address, self._i2c_addresses['unified'], setting_value)
+        self._wr_command(setting_address, setting_value)
 
-    def _setting_read_raw(self, setting_address: int, setting_byte_count: int):
-        return self._rd_command(setting_address, self._i2c_addresses['unified'], setting_byte_count)
+    def _setting_read_raw(self, setting_address: int, setting_byte_count: int) -> bytes:
+        return self._rd_command(setting_address, setting_byte_count)
 
-    def _setting_read_int(self, setting_address: int, setting_byte_count: int, signed: bool = False):
+    def _setting_read_int(self, setting_address: int, setting_byte_count: int, signed: bool = False) -> int:
         return int.from_bytes(self._setting_read_raw(setting_address, setting_byte_count), "big", signed=signed)
-
-    def _int_to_bool(self, integer: int) -> tuple[bool, ...]:
-        pass
 
     def _setting_read_bool(self, setting_address: int, setting_position: int = 0):
         setting = self._setting_read_int(setting_address, 1)
         return bool(setting & (1 << setting_position))
 
-    def _wr_command(self, command: int, i2c_address, payload: bytes) -> None:
+    def _wr_command(self, command: int, payload: bytes) -> None:
         """
         The WR command is used to write data to the probe. The payload is a bytes object that is written to the
         probe. Its length also needs to be supplied to the query command.
         """
-        _ = self._query("WR", i2c_address, command, payload, length=len(payload))
+        _ = self._query("WR", self._i2c_addresses["unified"], command, payload, length=len(payload))
 
-    def _rd_command(self, command: int, i2c_address, bytes_to_read: int) -> bytes:
+    def _rd_command(self, command: int, bytes_to_read: int) -> bytes:
         """
         The RD command is used to read data from the probe. In contrast to the WR command, the length of the data is
         not the length of the payload, but the number of bytes to read.
         """
-        return self._query("RD", i2c_address, command, length=bytes_to_read)
+        return self._query("RD", self._i2c_addresses["unified"], command, length=bytes_to_read)
 
 
 class _BumbleBee(_PMKProbe, metaclass=ABCMeta):
@@ -166,7 +169,7 @@ class _BumbleBee(_PMKProbe, metaclass=ABCMeta):
             self._executing_command(executing_command_address)
 
     def _executing_command(self, command: int):
-        self._wr_command(self._command_address, self._i2c_addresses['unified'], _unsigned_to_bytes(command, 2))
+        self._wr_command(self._command_address, _to_two_bytes_unsigned(command))
 
     @property
     def global_offset(self):
@@ -269,10 +272,23 @@ class _BumbleBee(_PMKProbe, metaclass=ABCMeta):
 
     @property
     def leds_off(self):
+        """
+        Attribute that determines whether the probe's LEDs (status, attenuation and overload LEDs) are off,
+        for example in photosensitive environments.
+
+        :getter: Returns the current 'LEDs off' state.
+        :setter: Sets the 'LEDs off' state.
+        """
         return self._setting_read_bool(0x0130, 1)
 
     @property
     def keylock(self):
+        """
+        Attribute that determines whether the probe's keyboard is locked.
+
+        :getter: Returns the current keylock state.
+        :setter: Sets the keylock state. (True means ON, False means OFF)
+        """
         return self._setting_read_bool(0x0130, 0)
 
     @leds_off.setter
@@ -327,7 +343,7 @@ class _BumbleBee(_PMKProbe, metaclass=ABCMeta):
         self._setting_write(address, _unsigned_to_bytes(setting, 1))
 
     @property
-    def offset_sync_enabled(self) -> bool:
+    def offset_sync(self) -> bool:
         """
         Read or write the offset synchronization setting. If set to True, the offset will be synchronized for all
         attenuation settings, otherwise it is scaled proportionally when switching the attenuation ratio.
@@ -337,8 +353,8 @@ class _BumbleBee(_PMKProbe, metaclass=ABCMeta):
         """
         return self._setting_read_bool(0x012F)
 
-    @offset_sync_enabled.setter
-    def offset_sync_enabled(self, value: bool) -> None:
+    @offset_sync.setter
+    def offset_sync(self, value: bool) -> None:
         self._setting_write(0x012F, _unsigned_to_bytes(int(value), 1))
         self._executing_command(0x0A05)
 
@@ -605,6 +621,361 @@ class HSDP4010(_HSDP):
                                   attenuation_ratios=UserMapping({10: 1}))
 
 
+class PowerOverFiber(_PMKProbe):
+    _i2c_addresses: dict[str, int] = {"unified": 0x0E, "metadata": 0x0E}  # BumbleBee only has one I2C address
+    _addressing: str = "W"
+    _error_log_size = 1000
+    _error_codes = {
+        0: "ERROR_NOERROR",
+        1: "ERROR_POWERGOOD_OUT_OF_RANGE",
+        2: "ERROR_UNDEFINED_I2C_COMMAND",
+        3: "ERROR_UNDEFINED_EEPROM_CONSTANT",
+        # An index was provided to eeprom constant read or write function which is undefined
+        4: "ERROR_PROGRAMMING_PM_TOO_FAST",
+        # A new PH flash chunk of data was sent over I2c, although the last data chunk was not finished programming
+        5: "ERROR_FAILED_TO_ENTER_PM_BL",  # Entering PH bootloader failed
+        6: "ERROR_PM_WAS_NOT_IN_BL_MODE",  # Command to leave BL mode was received, but PM was not in BL mode
+        8: "ERROR_PM_RECEIVED_INCOMPLETE_DATA",  # Incomplete auto message was received from PM.
+        9: "ERROR_LASER_OVERTEMP",  # Monitored laser current has unrealistic values
+        10: "ERROR_PD_OVERTEMP",  # Charge bank current too low for powering PM during system start-up
+        11: "ERROR_FIBER_BREAK",
+        12: "ERROR_BEAM_LOSS",
+
+        7: "WARNING_PM_WAS_IN_BL_MODE",  # Command to enter BL mode was received, but PM was already in BL mode
+        23: "WARNING_BEAM_LOSS",
+        25: "WARNING_RX_BUFFER_OVERFLOW",
+        26: "WARNING_WRONG_CRC",
+
+        37: "EVENT_PM_BOOTLOADER_ENTERED",
+        38: "EVENT_PM_BOOTLOADER_EXITED",
+        39: "EVENT_LM_BOOTLOADER_ENTERED",
+        40: "EVENT_LM_BOOTLOADER_EXITED",
+    }
+
+    class PMStatusFlag(Enum):
+        CHARGING = 0
+        READY = 1
+        OPERATIONAL = 2
+        BOOTLOADER = 3
+
+    class OperatingTime(Enum):
+        TOTAL = 0
+        WITH_LOAD = 1
+        WITHOUT_LOAD = 2
+        LASER_OFF = 3
+
+    _led_colors = UserMapping({"red": 0, "green": 1, "blue": 2, "magenta": 3, "cyan": 4, "yellow": 5, "white": 6,
+                               "black": 7})
+
+    @property
+    def properties(self) -> PMKProbeProperties:
+        return PMKProbeProperties(input_voltage_range=(0, 0),
+                                  attenuation_ratios=UserMapping({}))
+
+    @lru_cache
+    def _read_metadata(self) -> PowerOverFiberMetadata:
+        self._query("WR", i2c_address=self._i2c_addresses['metadata'], command=0x0C01, payload=DUMMY * 2, length=0x02)
+        return PowerOverFiberMetadata.from_bytes(
+            self._query("RD", i2c_address=self._i2c_addresses['metadata'], command=0x1000,
+                        length=0xC1))
+
+    @property
+    def echo_value(self):
+        """ Read the echo value. """
+        return self._setting_read_int(0x0801, 4, signed=False)
+
+    @property
+    def status_flag(self) -> PMStatusFlag:
+        """ Read the status flag. """
+        read_flag = self._setting_read_int(0x0802, 1, signed=False)
+        try:
+            return self.PMStatusFlag(read_flag)
+        except ValueError as e:
+            raise ValueError(f"PoF returned unknown status flag ({read_flag}).") from e
+
+    @property
+    def firefly_on(self):
+        """ Check if the attached FireFly is turned on (high load). """
+        return self._setting_read_bool(0x0803, 1)
+
+    @property
+    def photodiode_voltage(self):
+        """ Read the photodiode voltage. """
+        return self._setting_read_int(0x0804, 4, signed=False)
+
+    @property
+    def photodiode_current(self):
+        """ Read the photodiode current. """
+        return self._setting_read_int(0x0805, 4, signed=False)
+
+    @property
+    def lm_temperature(self):
+        """ Read the LM temperature. """
+        return self._setting_read_int(0x0806, 4, signed=False)
+
+    @property
+    def pm_temperature(self):
+        """ Read the PM temperature. """
+        return self._setting_read_int(0x0807, 4, signed=False)
+
+    @property
+    def photodiode_temperature(self):
+        """ Read the photodiode temperature. """
+        return self._setting_read_int(0x0808, 4, signed=False)
+
+    @property
+    def lm_version(self):
+        """ Read the LM version. """
+        (major, minor, patch) = self._setting_read_raw(0x0809, 3)
+        return f"LM v{major}.{minor}.{patch}"
+
+    @property
+    def pm_version(self):
+        """ Read the PM version. """
+        (major, minor, patch) = self._setting_read_raw(0x080A, 3)
+        return f"PM v{major}.{minor}.{patch}" if (bool(major) or bool(minor) or bool(patch)) else "Unavailable"
+
+    @property
+    def lm_status_led(self):
+        """ Read the LM status LED. """
+        return self._setting_read_int(0x080B, 4, signed=False)
+
+    @property
+    def chargebank_voltage(self):
+        """ Read the charge bank voltage. """
+        return self._setting_read_int(0x080C, 4, signed=False)
+
+    @property
+    def chargebank_current(self):
+        """ Read the charge bank current. """
+        return self._setting_read_int(0x080D, 4, signed=False)
+
+    @property
+    def chargebank_state(self):
+        """ Read the charge bank state. """
+        return self._setting_read_int(0x080E, 4, signed=False)
+
+    @chargebank_state.setter
+    def chargebank_state(self, value):
+        """ Set the charge bank state. """
+        self._setting_write(0x080F, int.to_bytes(value))
+
+    @property
+    def output_state(self):
+        """ Read the output state. """
+        return self._setting_read_int(0x0811, 4, signed=False)
+
+    @property
+    def output_fault_indication(self):
+        """ Read the output fault indication. """
+        return self._setting_read_int(0x0813, 4, signed=False)
+
+    @property
+    def load_detect_voltage(self):
+        """ Read the load detect voltage. """
+        return self._setting_read_int(0x0815, 4, signed=False)
+
+    @property
+    def led_color(self):
+        """
+        Attribute that determines the probe's status LED color. Allowed colors are red, green, blue, magenta, cyan,
+        yellow, white, black (off).
+
+        :getter: Returns the current LED color.
+        :setter: Sets the LED color.
+        """
+        return self._led_colors.get_user_value(self._setting_read_int(0x0A02, 1, signed=False))
+
+    @led_color.setter
+    def led_color(self, value: Literal["red", "green", "blue", "magenta", "cyan", "yellow", "white", "black"]):
+        if value not in self._led_colors:
+            raise ValueError(
+                f"LED color {value} is not supported by PoF. List of available colors: "
+                f"{list(self._led_colors.keys())}.")
+        self._setting_write(0x0A00, _unsigned_to_bytes(self._led_colors.get_internal_value(value), 1))
+
+    def force_bootloader(self):
+        """ Change the state of LM to bootloader state and send BL to PM without checking its answer. """
+        self._setting_write(0x0A11, int.to_bytes(0))
+
+    @property
+    def laser_enabled(self):
+        """ Read if the laser is enabled. """
+        return self._setting_read_int(0x0A09, 4, signed=True)
+
+    @laser_enabled.setter
+    def laser_enabled(self, value):
+        """ Set the laser regulator status. """
+        self._setting_write(0x0A0A, int.to_bytes(value))
+
+    @property
+    def laser_current(self):
+        """ Read the laser current. """
+        return self._setting_read_int(0x0A0B, 4, signed=False)
+
+    @property
+    def laser_voltage(self):
+        """ Read the laser voltage. """
+        return self._setting_read_int(0x0A0C, 4, signed=False)
+
+    @property
+    def laser_temperature(self):
+        """ Read the laser temperature. """
+        return self._setting_read_int(0x0A0E, 4, signed=False)
+
+    @property
+    def laser_ictrl(self):
+        """ Read the laser ICTRL. """
+        return self._setting_read_int(0x0A10, 2, signed=False)
+
+    @laser_ictrl.setter
+    def laser_ictrl(self, value):
+        """ Write the laser control current. """
+        self._setting_write(0x0A0F, int.to_bytes(value, length=2))
+
+    @property
+    def laser_imon(self):
+        """ Read the laser IMON. """
+        return self._setting_read_int(0x0A0B, 4, signed=False)
+
+    @property
+    def chargebank_powergood(self):
+        """ Read the power good value. """
+        return self._setting_read_int(0x0A25, 4, signed=True)
+
+    @property
+    def errorcode(self):
+        """ Read the power good value. """
+        return self._setting_read_int(0x0A26, 1, signed=False)
+
+    @output_state.setter
+    def output_state(self, value):
+        """ Set the PM output state. """
+        self._setting_write(0x0A30, int.to_bytes(value))
+
+    @property
+    def safety_shutdown_enabled(self):
+        """ Check if safety shutdown is enabled. """
+        return self._setting_read_int(0x0A32, 4, signed=False)
+
+    @safety_shutdown_enabled.setter
+    def safety_shutdown_enabled(self, value):
+        """ Set the LM safety shutdown. """
+        self._setting_write(0x0A31, int.to_bytes(value))
+
+    def lm_enter_bootloader(self):
+        """ Enter LM Bootloader Mode """
+        self._setting_write(0x0AAA, int.to_bytes(0x0))
+
+    def lm_enter_application(self):
+        """ Enter LM Bootloader Mode """
+        self._setting_write(0x0000, int.to_bytes(0x43))
+
+    def pm_enter_bootloader(self):
+        self._setting_write(0x0999, int.to_bytes(1))
+
+    def pm_enter_application(self):
+        self._setting_write(0x099A, int.to_bytes(1))
+
+    def read_operating_time(self, counter: OperatingTime):  # in seconds
+        return self._setting_read_int(0x0A16 + counter.value, 4, signed=False)  # add offset depending on specific field
+
+    @property
+    def pm_read_mode(self):
+        return self._setting_read_int(0x0A2A, 1, False)
+
+    @property
+    def pm_poll_status(self):
+        return self._setting_read_int(0x0A29, 1, False)
+
+    def lm_flash(self, path: Path, callback_fn: Callable = None) -> None:
+        data, start_address = read_hex_file(path)
+        self.flash_bytes(start_address, 0x0053, 128, data, callback_fn, None)
+
+    def pm_flash(self, path: Path, callback_fn: Callable = None) -> None:
+
+        def wait_for_pm(address: int) -> None:
+            timeout = 1  # s
+            while True:
+                if timeout <= 0:
+                    raise TimeoutError(f"Got stuck flashing at {address}. Aborting.")
+                match self.pm_poll_status:  # this polls the PM
+                    case 0x01:  # chunk received, continue with next chunk
+                        break
+                    case 0xFE:
+                        raise TimeoutError("PH hasn't answered a read command by LM. Please power cycle the LM.")
+                    case 0xFF:
+                        time.sleep(0.05)  # poll every 0.05 s
+
+        data, start_address = read_hex_file(path)
+        data += b"\x00" * (64 - (len(data) % 64))  # Pad data to page (64 bytes)
+        self.flash_bytes(start_address, 0x0A28, 16, data, callback_fn, wait_for_fn=self.wait_for_pm)
+
+    def flash_bytes(self, start_address: int, flash_command: int, chunk_size: int, data: bytes,
+                    callback_fn: Callable[[int, int], None], wait_for_fn: Callable[[int], None] | None) -> None:
+        address = start_address
+        f = io.BytesIO(data)
+        while chunk := f.read(chunk_size):
+            self._query(
+                "FL",
+                self._i2c_addresses["unified"],
+                flash_command,
+                _to_two_bytes_unsigned(address) + chunk,
+                length=len(chunk) + 2  # We need to add 2 bytes because of the address
+            )
+            address += len(chunk)
+            if wait_for_fn:
+                wait_for_fn(address)
+            if callback_fn:
+                callback_fn(address - start_address, len(data))
+
+    def _parse_error_log(self, data: bytes):
+        if len(data) % 5 != 0:
+            raise ValueError("Error log data length must be a multiple of 5 bytes")
+        entries = []
+        for i in range(0, len(data), 5):
+            timestamp_bytes = data[i:i + 4]
+            error_code = data[i + 4]
+            timestamp = timedelta(seconds=int.from_bytes(timestamp_bytes, byteorder='little'))
+            entries.append((timestamp, f"{self._error_codes.get(error_code)} ({error_code})"))
+        return entries
+
+    def read_error_log(self):
+        # Validate chunk size
+        chunk_size = 255
+        error_log_data = bytearray()
+        for offset in range(0, self._error_log_size, chunk_size):
+            current_chunk_size = min(chunk_size, self._error_log_size - offset)
+            self._query(
+                "WR",
+                i2c_address=self._i2c_addresses['unified'],
+                command=0x0C02,
+                payload=offset.to_bytes(2, byteorder='big'),
+                length=2
+            )
+            chunk = self._query(
+                "RD",
+                i2c_address=self._i2c_addresses['unified'],
+                command=0x1001,
+                length=current_chunk_size
+            )
+            error_log_data.extend(chunk)
+        return self._parse_error_log(error_log_data)  # Placeholder for actual parsing logic
+
+    def system_reset(self):
+        """  """
+        self._setting_write(0x0A0D, int.to_bytes(0x00))
+
+    def factory_reset(self):
+        """ Reset the probe to factory settings. """
+        self._setting_write(0x0A2E, int.to_bytes(0x00))
+
+    def developer_factory_reset(self):
+        """ Reset the probe to factory settings. """
+        self._setting_write(0x0A2F, int.to_bytes(0x00))
+        self._read_metadata.cache_clear()
+
+
 class FireFly(_PMKProbe):
     """Class for controlling the FireFly probe. See http://www.pmk.de/en/products/firefly for specifications."""
 
@@ -628,9 +999,9 @@ class FireFly(_PMKProbe):
 
     @lru_cache
     def _read_metadata(self) -> FireFlyMetadata:
-        self._query("WR", i2c_address=self._i2c_addresses['metadata'], command=0x0C01, payload=DUMMY * 2, length=0x02)
+        self._query("WR", i2c_address=self._i2c_addresses['metadata'], command=0x0C01, payload=b'\x00' * 2, length=0x02)
         return FireFlyMetadata.from_bytes(self._query("RD", i2c_address=self._i2c_addresses['metadata'], command=0x1000,
-                                                      length=0xBF))
+                                                      length=0xC5))
 
     @property
     def metadata(self) -> FireFlyMetadata:
@@ -671,7 +1042,7 @@ class FireFly(_PMKProbe):
         if not self.probe_head_on:
             return levels[2322]  # if the probe head is off, the battery indicator is off
         battery_level = self._battery_adc()
-        for i, limit in enumerate(levels.keys()):
+        for limit in levels.keys():
             if battery_level <= limit:
                 return levels[limit]
         raise ValueError(f"Invalid battery level {battery_level}.")
@@ -686,22 +1057,26 @@ class FireFly(_PMKProbe):
         return self._setting_read_bool(0x090A)
 
     @probe_head_on.setter
-    def probe_head_on(self, value: bool) -> None:
-        self._wr_command(0x0A30, self._i2c_addresses['unified'], _unsigned_to_bytes(int(value), 1))
+    def probe_head_on(self, value: bool):
+        if self.probe_head_on != value:
+            self._wr_command(0x0803, DUMMY)
+            timeout = time.time() + 5
+            sleep_time = 0.1
+            while self.probe_head_on != value and time.time() < timeout:
+                time.sleep(sleep_time)
+        else:
+            pass  # no need to do anything if the probe head is already in the desired state
 
-    def auto_zero(self) -> None:
-        """
-        Performs an auto zero on the probe.
+    def auto_zero(self):
+        self._wr_command(0x0A10, DUMMY)
 
-        :return: None
-        """
-        self._wr_command(0x0A10, self._i2c_addresses['unified'], DUMMY)
+    def enable_expert_mode(self):
+        self._wr_command(0x0A2F, b"pmk1993;")
 
 
 BumbleBeeType = TypeVar("BumbleBeeType", bound=_BumbleBee)
 HSDPType = TypeVar("HSDPType", bound=_HSDP)
 ProbeType = TypeVar("ProbeType", bound=_PMKProbe)
 
-_ALL_PMK_PROBES = (
-    BumbleBee2kV, BumbleBee1kV, BumbleBee400V, BumbleBee200V, Hornet4kV, HSDP2010, HSDP2010L, HSDP2025, HSDP2025L,
-    HSDP2050, HSDP4010, FireFly)
+_ALL_PMK_PROBES = set(
+    cls for cls in globals().values() if (isinstance(cls, type) and issubclass(cls, _PMKProbe)) and not isabstract(cls))
