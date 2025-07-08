@@ -14,7 +14,7 @@ from pmk_probes import _version
 sys.path.append(os.path.abspath('../..'))
 
 project = 'PMK Probes'
-copyright = '2024, PMK Mess- und Kommunikationstechnik GmbH'
+copyright = '2025, PMK Mess- und Kommunikationstechnik GmbH'
 author = 'Felix Wenk'
 
 release = _version.__version__
