@@ -4,7 +4,7 @@
    contain the root `toctree` directive.
 
 Welcome to the PMK Probes documentation!
-======================================
+========================================
 
 This is the official documentation for PMK Probes, a Python package to control probes by `PMK <http://www.pmk.de/>`_.
 
