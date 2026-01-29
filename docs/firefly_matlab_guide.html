@@ -342,7 +342,11 @@ firefly.probe_head_on = py.bool(true);
 
 % Check if probe head is on
 is_on = logical(firefly.probe_head_on);
-fprintf('Probe head is: %s\n', string(is_on));
+if is_on
+    fprintf('Probe head is: ON\n');
+else
+    fprintf('Probe head is: OFF\n');
+end
 
 % Wait for probe to warm up
 % The probe goes through states: WARMING_UP -> READY_TO_USE
@@ -423,10 +427,10 @@ fprintf('Battery voltage: %.2f V\n', voltage);
 indicator = firefly.battery_indicator;
 
 % Convert Python tuple to MATLAB
-led_states = cell(indicator);
+battery_leds = cell(indicator);
 fprintf('Battery indicator LEDs:\n');
 for i = 1:4
-    led = led_states{i};
+    led = battery_leds{i};
     fprintf('  LED %d: %s\n', i, char(led.name));
 end</code></pre>
         
@@ -581,14 +585,14 @@ firefly.probe_head_on = py.bool(true);
 
 % Monitor battery for 60 seconds
 fprintf('Monitoring battery status...\n');
-voltages = [];
-times = [];
+num_samples = 60;
+voltages = zeros(1, num_samples);
+times = 1:num_samples;
 
-for i = 1:60
+for i = 1:num_samples
     % Read battery voltage
     v = double(firefly.battery_voltage);
-    voltages(end+1) = v;
-    times(end+1) = i;
+    voltages(i) = v;
     
     % Display current status
     fprintf('[%02d s] Battery: %.2f V\n', i, v);
