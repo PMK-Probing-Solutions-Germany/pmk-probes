@@ -1,0 +1,882 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Using the FireFly Probe in MATLAB - PMK Probes Guide</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            color: #333;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            background-color: white;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+            margin-bottom: 30px;
+        }
+        
+        h2 {
+            color: #34495e;
+            margin-top: 40px;
+            border-bottom: 2px solid #ecf0f1;
+            padding-bottom: 8px;
+        }
+        
+        h3 {
+            color: #555;
+            margin-top: 25px;
+        }
+        
+        .info-box {
+            background-color: #e8f4f8;
+            border-left: 4px solid #3498db;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        
+        .warning-box {
+            background-color: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        
+        .success-box {
+            background-color: #d4edda;
+            border-left: 4px solid #28a745;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        
+        code {
+            background-color: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+        
+        pre {
+            background-color: #2d2d2d;
+            color: #f8f8f2;
+            padding: 20px;
+            border-radius: 5px;
+            overflow-x: auto;
+            margin: 20px 0;
+        }
+        
+        pre code {
+            background-color: transparent;
+            padding: 0;
+            color: #f8f8f2;
+        }
+        
+        .matlab-code {
+            background-color: #f0f0f0;
+            color: #000;
+        }
+        
+        .matlab-code code {
+            color: #000;
+        }
+        
+        ul, ol {
+            margin: 15px 0;
+            padding-left: 30px;
+        }
+        
+        li {
+            margin: 8px 0;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        
+        th {
+            background-color: #3498db;
+            color: white;
+        }
+        
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        
+        a {
+            color: #3498db;
+            text-decoration: none;
+        }
+        
+        a:hover {
+            text-decoration: underline;
+        }
+        
+        .toc {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        
+        .toc ul {
+            list-style-type: none;
+            padding-left: 0;
+        }
+        
+        .toc ul ul {
+            padding-left: 20px;
+        }
+        
+        .footer {
+            margin-top: 50px;
+            padding-top: 20px;
+            border-top: 1px solid #ddd;
+            text-align: center;
+            color: #666;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Using the FireFly Probe in MATLAB</h1>
+        
+        <div class="info-box">
+            <strong>Note:</strong> This guide explains how to use the PMK FireFly probe with MATLAB by leveraging MATLAB's Python integration capabilities. The FireFly is an active oscilloscope probe designed for high-precision measurements.
+        </div>
+        
+        <div class="toc">
+            <h2>Table of Contents</h2>
+            <ul>
+                <li><a href="#introduction">1. Introduction</a></li>
+                <li><a href="#prerequisites">2. Prerequisites</a></li>
+                <li><a href="#installation">3. Installation</a></li>
+                <li><a href="#setup">4. Setting Up Python in MATLAB</a></li>
+                <li><a href="#basic-usage">5. Basic Usage</a>
+                    <ul>
+                        <li><a href="#connecting">5.1 Connecting to the Probe</a></li>
+                        <li><a href="#metadata">5.2 Reading Probe Metadata</a></li>
+                        <li><a href="#probe-head">5.3 Controlling the Probe Head</a></li>
+                        <li><a href="#auto-zero">5.4 Auto-Zero Calibration</a></li>
+                        <li><a href="#battery">5.5 Battery Status</a></li>
+                    </ul>
+                </li>
+                <li><a href="#advanced">6. Advanced Features</a></li>
+                <li><a href="#examples">7. Complete Examples</a></li>
+                <li><a href="#troubleshooting">8. Troubleshooting</a></li>
+                <li><a href="#reference">9. Reference</a></li>
+            </ul>
+        </div>
+        
+        <h2 id="introduction">1. Introduction</h2>
+        
+        <p>The PMK FireFly is a high-performance active oscilloscope probe designed for precise voltage measurements. This guide demonstrates how to control the FireFly probe using MATLAB by calling the <code>pmk-probes</code> Python package through MATLAB's Python integration.</p>
+        
+        <h3>Key Features of the FireFly Probe:</h3>
+        <ul>
+            <li>Input voltage range: -1V to +1V</li>
+            <li>Fixed attenuation ratio: 1:1</li>
+            <li>Battery-powered probe head for isolated measurements</li>
+            <li>Auto-zero calibration capability</li>
+            <li>Status LED indicators for probe state</li>
+            <li>Built-in battery level monitoring</li>
+            <li>Propagation delay compensation</li>
+        </ul>
+        
+        <h2 id="prerequisites">2. Prerequisites</h2>
+        
+        <p>Before you begin, ensure you have the following:</p>
+        
+        <ul>
+            <li><strong>MATLAB:</strong> R2019b or later (for full Python integration support)</li>
+            <li><strong>Python:</strong> Version 3.10 or higher installed on your system</li>
+            <li><strong>Hardware:</strong>
+                <ul>
+                    <li>PMK FireFly probe</li>
+                    <li>PMK PS02 or PS03 power supply</li>
+                    <li>USB or serial connection to the power supply</li>
+                </ul>
+            </li>
+            <li><strong>Drivers:</strong> Appropriate USB/serial drivers for your power supply</li>
+        </ul>
+        
+        <div class="info-box">
+            <strong>Compatibility Note:</strong> MATLAB R2019b and later versions have improved Python integration. For best results, use MATLAB R2021a or newer.
+        </div>
+        
+        <h2 id="installation">3. Installation</h2>
+        
+        <h3>3.1 Install Python Package</h3>
+        
+        <p>First, install the <code>pmk-probes</code> Python package using pip. Open a command prompt or terminal and run:</p>
+        
+        <pre class="matlab-code"><code>pip install pmk-probes</code></pre>
+        
+        <p>This will install the package and its dependencies (including <code>pyserial</code>).</p>
+        
+        <h3>3.2 Verify Installation</h3>
+        
+        <p>Verify the installation by running Python and importing the package:</p>
+        
+        <pre><code>python -c "import pmk_probes; print('Installation successful!')"</code></pre>
+        
+        <h2 id="setup">4. Setting Up Python in MATLAB</h2>
+        
+        <h3>4.1 Check Python Version in MATLAB</h3>
+        
+        <p>In MATLAB, check which Python version is configured:</p>
+        
+        <pre class="matlab-code"><code>pyenv</code></pre>
+        
+        <p>This will display information about the current Python environment.</p>
+        
+        <h3>4.2 Configure Python Environment (if needed)</h3>
+        
+        <p>If MATLAB is not using the correct Python version, you can specify the Python executable:</p>
+        
+        <pre class="matlab-code"><code>% On Windows
+pyenv('Version', 'C:\Python310\python.exe')
+
+% On Linux/Mac
+pyenv('Version', '/usr/bin/python3.10')</code></pre>
+        
+        <div class="warning-box">
+            <strong>Important:</strong> You must restart MATLAB after changing the Python environment for the changes to take effect.
+        </div>
+        
+        <h3>4.3 Verify Package Access</h3>
+        
+        <p>Verify that MATLAB can access the <code>pmk_probes</code> package:</p>
+        
+        <pre class="matlab-code"><code>% Try to import the package
+py.importlib.import_module('pmk_probes.probes')
+disp('Package accessible from MATLAB!')</code></pre>
+        
+        <h2 id="basic-usage">5. Basic Usage</h2>
+        
+        <h3 id="connecting">5.1 Connecting to the Probe</h3>
+        
+        <p>To use the FireFly probe, you first need to connect to the power supply and create a FireFly object:</p>
+        
+        <pre class="matlab-code"><code>% Import required Python modules
+PS03 = py.importlib.import_module('pmk_probes.power_supplies').PS03;
+FireFly = py.importlib.import_module('pmk_probes.probes').FireFly;
+Channel = py.importlib.import_module('pmk_probes.power_supplies').Channel;
+
+% Connect to the power supply
+% Replace 'COM3' with your actual COM port (Windows)
+% or '/dev/ttyUSB0' (Linux) or '/dev/tty.usbserial-XXX' (Mac)
+ps = PS03('COM3');
+
+% Create FireFly probe object on channel 1
+firefly = FireFly(ps, Channel.CH1);</code></pre>
+        
+        <div class="info-box">
+            <strong>Finding Your COM Port:</strong>
+            <ul>
+                <li><strong>Windows:</strong> Check Device Manager under "Ports (COM & LPT)"</li>
+                <li><strong>Linux:</strong> Run <code>ls /dev/ttyUSB*</code> or <code>dmesg | grep tty</code></li>
+                <li><strong>Mac:</strong> Run <code>ls /dev/tty.usb*</code></li>
+            </ul>
+        </div>
+        
+        <h3 id="metadata">5.2 Reading Probe Metadata</h3>
+        
+        <p>You can read various metadata from the probe, including serial number, model information, and calibration dates:</p>
+        
+        <pre class="matlab-code"><code>% Get probe metadata
+metadata = firefly.metadata;
+
+% Access specific metadata fields
+serial_number = char(metadata.serial_number);
+model = char(metadata.model);
+manufacturer = char(metadata.manufacturer);
+production_date = char(metadata.production_date);
+calibration_due = char(metadata.calibration_due_date);
+hw_revision = char(metadata.hardware_revision);
+sw_revision = char(metadata.software_revision);
+prop_delay = double(metadata.propagation_delay);
+
+% Display metadata
+fprintf('FireFly Probe Information:\n');
+fprintf('  Serial Number: %s\n', serial_number);
+fprintf('  Model: %s\n', model);
+fprintf('  Manufacturer: %s\n', manufacturer);
+fprintf('  Hardware Revision: %s\n', hw_revision);
+fprintf('  Software Revision: %s\n', sw_revision);
+fprintf('  Production Date: %s\n', production_date);
+fprintf('  Calibration Due: %s\n', calibration_due);
+fprintf('  Propagation Delay: %.2f ns\n', prop_delay);</code></pre>
+        
+        <h3 id="probe-head">5.3 Controlling the Probe Head</h3>
+        
+        <p>The FireFly probe has a battery-powered probe head that must be turned on for measurements:</p>
+        
+        <pre class="matlab-code"><code>% Turn on the probe head
+firefly.probe_head_on = py.bool(true);
+
+% Check if probe head is on
+is_on = logical(firefly.probe_head_on);
+fprintf('Probe head is: %s\n', string(is_on));
+
+% Wait for probe to warm up
+% The probe goes through states: WARMING_UP -> READY_TO_USE
+pause(3);  % Wait 3 seconds
+
+% Check probe status
+status = firefly.probe_status_led;
+fprintf('Probe status: %s\n', char(status.name));
+
+% Turn off the probe head when done
+firefly.probe_head_on = py.bool(false);</code></pre>
+        
+        <h3>Probe States</h3>
+        
+        <table>
+            <tr>
+                <th>State</th>
+                <th>Description</th>
+            </tr>
+            <tr>
+                <td>NOT_POWERED</td>
+                <td>Probe is not receiving power</td>
+            </tr>
+            <tr>
+                <td>PROBE_HEAD_OFF</td>
+                <td>Probe head is turned off</td>
+            </tr>
+            <tr>
+                <td>WARMING_UP</td>
+                <td>Probe is warming up (takes a few seconds)</td>
+            </tr>
+            <tr>
+                <td>READY_TO_USE</td>
+                <td>Probe is ready for measurements</td>
+            </tr>
+            <tr>
+                <td>EMPTY_OR_NO_BATTERY</td>
+                <td>Battery is empty or not connected</td>
+            </tr>
+            <tr>
+                <td>ERROR</td>
+                <td>An error has occurred</td>
+            </tr>
+        </table>
+        
+        <h3 id="auto-zero">5.4 Auto-Zero Calibration</h3>
+        
+        <p>The auto-zero function calibrates the probe's offset. This should be performed with the probe disconnected from the circuit under test:</p>
+        
+        <pre class="matlab-code"><code>% Ensure probe head is on
+firefly.probe_head_on = py.bool(true);
+
+% Wait for probe to be ready
+pause(3);
+
+% Disconnect probe from circuit and perform auto-zero
+firefly.auto_zero();
+
+fprintf('Auto-zero calibration completed.\n');</code></pre>
+        
+        <div class="warning-box">
+            <strong>Important:</strong> Always disconnect the probe from the circuit before performing auto-zero calibration. The probe input should be at ground potential (0V) during calibration.
+        </div>
+        
+        <h3 id="battery">5.5 Battery Status</h3>
+        
+        <p>Monitor the battery status to ensure reliable operation:</p>
+        
+        <pre class="matlab-code"><code>% Turn on probe head (required for battery reading)
+firefly.probe_head_on = py.bool(true);
+pause(1);  % Allow time for reading to stabilize
+
+% Get battery voltage
+voltage = double(firefly.battery_voltage);
+fprintf('Battery voltage: %.2f V\n', voltage);
+
+% Get battery indicator (4 LEDs from bottom to top)
+indicator = firefly.battery_indicator;
+
+% Convert Python tuple to MATLAB
+led_states = cell(indicator);
+fprintf('Battery indicator LEDs:\n');
+for i = 1:4
+    led = led_states{i};
+    fprintf('  LED %d: %s\n', i, char(led.name));
+end</code></pre>
+        
+        <div class="warning-box">
+            <strong>Note:</strong> Battery voltage is not available immediately after turning off the probe head. Wait approximately 200 milliseconds before reading the battery voltage after changing the probe head state.
+        </div>
+        
+        <h3>Battery LED States</h3>
+        
+        <table>
+            <tr>
+                <th>LED State</th>
+                <th>Meaning</th>
+            </tr>
+            <tr>
+                <td>OFF</td>
+                <td>LED is off</td>
+            </tr>
+            <tr>
+                <td>GREEN</td>
+                <td>Battery level is good</td>
+            </tr>
+            <tr>
+                <td>YELLOW</td>
+                <td>Battery level is moderate</td>
+            </tr>
+            <tr>
+                <td>BLINKING_RED</td>
+                <td>Battery level is low (needs charging)</td>
+            </tr>
+        </table>
+        
+        <h2 id="advanced">6. Advanced Features</h2>
+        
+        <h3>6.1 Reading Probe Properties</h3>
+        
+        <p>Get information about the probe's capabilities:</p>
+        
+        <pre class="matlab-code"><code>% Get probe properties
+props = firefly.properties;
+
+% Access voltage range
+v_range = props.input_voltage_range;
+min_voltage = double(v_range{1});
+max_voltage = double(v_range{2});
+fprintf('Input voltage range: %.1f V to %.1f V\n', min_voltage, max_voltage);
+
+% Access attenuation ratios
+attn_map = props.attenuation_ratios;
+fprintf('Attenuation ratio: 1:1 (fixed)\n');</code></pre>
+        
+        <h3>6.2 Working with Power Supply Channels</h3>
+        
+        <p>If you have multiple probes, you can create objects for different channels:</p>
+        
+        <pre class="matlab-code"><code>% Import modules
+PS03 = py.importlib.import_module('pmk_probes.power_supplies').PS03;
+FireFly = py.importlib.import_module('pmk_probes.probes').FireFly;
+BumbleBee2kV = py.importlib.import_module('pmk_probes.probes').BumbleBee2kV;
+Channel = py.importlib.import_module('pmk_probes.power_supplies').Channel;
+
+% Connect to power supply
+ps = PS03('COM3');
+
+% Create multiple probe objects
+firefly1 = FireFly(ps, Channel.CH1);
+firefly2 = FireFly(ps, Channel.CH2);
+bumblebee = BumbleBee2kV(ps, Channel.CH3);
+
+% Control different probes independently
+firefly1.probe_head_on = py.bool(true);
+firefly2.probe_head_on = py.bool(true);</code></pre>
+        
+        <h3>6.3 Expert Mode</h3>
+        
+        <p>The FireFly probe has an expert mode that unlocks additional features:</p>
+        
+        <pre class="matlab-code"><code>% Enable expert mode (use with caution)
+firefly.enable_expert_mode();</code></pre>
+        
+        <div class="warning-box">
+            <strong>Warning:</strong> Expert mode provides access to advanced features that should only be used by experienced users. Incorrect use may affect probe calibration or functionality.
+        </div>
+        
+        <h2 id="examples">7. Complete Examples</h2>
+        
+        <h3>Example 1: Basic Probe Setup and Calibration</h3>
+        
+        <pre class="matlab-code"><code>% Complete example for setting up and calibrating a FireFly probe
+
+% Import modules
+PS03 = py.importlib.import_module('pmk_probes.power_supplies').PS03;
+FireFly = py.importlib.import_module('pmk_probes.probes').FireFly;
+Channel = py.importlib.import_module('pmk_probes.power_supplies').Channel;
+
+% Connect to power supply (adjust COM port as needed)
+ps = PS03('COM3');
+
+% Create FireFly probe on channel 1
+firefly = FireFly(ps, Channel.CH1);
+
+% Display probe information
+metadata = firefly.metadata;
+fprintf('Connected to FireFly probe:\n');
+fprintf('  Serial Number: %s\n', char(metadata.serial_number));
+fprintf('  Model: %s\n', char(metadata.model));
+
+% Turn on probe head
+fprintf('Turning on probe head...\n');
+firefly.probe_head_on = py.bool(true);
+
+% Wait for warm-up
+fprintf('Waiting for probe to warm up...\n');
+pause(3);
+
+% Check status
+status = firefly.probe_status_led;
+fprintf('Probe status: %s\n', char(status.name));
+
+% Perform auto-zero calibration
+fprintf('Performing auto-zero calibration...\n');
+fprintf('Please ensure probe is disconnected from circuit.\n');
+pause(2);  % Give user time to disconnect
+firefly.auto_zero();
+fprintf('Calibration complete!\n');
+
+% Check battery status
+voltage = double(firefly.battery_voltage);
+fprintf('Battery voltage: %.2f V\n', voltage);
+
+% Ready for measurements
+fprintf('Probe is ready for use!\n');
+
+% When done, turn off probe head
+fprintf('Turning off probe head...\n');
+firefly.probe_head_on = py.bool(false);
+fprintf('Done.\n');</code></pre>
+        
+        <h3>Example 2: Battery Monitoring Script</h3>
+        
+        <pre class="matlab-code"><code>% Monitor battery status over time
+
+% Import modules
+PS03 = py.importlib.import_module('pmk_probes.power_supplies').PS03;
+FireFly = py.importlib.import_module('pmk_probes.probes').FireFly;
+Channel = py.importlib.import_module('pmk_probes.power_supplies').Channel;
+
+% Connect and setup
+ps = PS03('COM3');
+firefly = FireFly(ps, Channel.CH1);
+firefly.probe_head_on = py.bool(true);
+
+% Monitor battery for 60 seconds
+fprintf('Monitoring battery status...\n');
+voltages = [];
+times = [];
+
+for i = 1:60
+    % Read battery voltage
+    v = double(firefly.battery_voltage);
+    voltages(end+1) = v;
+    times(end+1) = i;
+    
+    % Display current status
+    fprintf('[%02d s] Battery: %.2f V\n', i, v);
+    
+    pause(1);
+end
+
+% Plot results
+figure;
+plot(times, voltages, 'b-', 'LineWidth', 2);
+xlabel('Time (s)');
+ylabel('Battery Voltage (V)');
+title('FireFly Probe Battery Voltage Over Time');
+grid on;
+
+% Turn off probe
+firefly.probe_head_on = py.bool(false);
+fprintf('Monitoring complete.\n');</code></pre>
+        
+        <h3>Example 3: Multi-Probe Setup</h3>
+        
+        <pre class="matlab-code"><code>% Working with multiple FireFly probes
+
+% Import modules
+PS03 = py.importlib.import_module('pmk_probes.power_supplies').PS03;
+FireFly = py.importlib.import_module('pmk_probes.probes').FireFly;
+Channel = py.importlib.import_module('pmk_probes.power_supplies').Channel;
+
+% Connect to power supply
+ps = PS03('COM3');
+
+% Create probe objects for channels 1 and 2
+probe1 = FireFly(ps, Channel.CH1);
+probe2 = FireFly(ps, Channel.CH2);
+
+% Get metadata for both probes
+fprintf('Probe 1 S/N: %s\n', char(probe1.metadata.serial_number));
+fprintf('Probe 2 S/N: %s\n', char(probe2.metadata.serial_number));
+
+% Turn on both probe heads
+fprintf('Activating both probes...\n');
+probe1.probe_head_on = py.bool(true);
+probe2.probe_head_on = py.bool(true);
+
+% Wait for warm-up
+pause(3);
+
+% Calibrate both probes
+fprintf('Calibrating probe 1...\n');
+probe1.auto_zero();
+fprintf('Calibrating probe 2...\n');
+probe2.auto_zero();
+
+% Check status of both probes
+fprintf('Probe 1 status: %s\n', char(probe1.probe_status_led.name));
+fprintf('Probe 2 status: %s\n', char(probe2.probe_status_led.name));
+
+fprintf('Both probes ready!\n');
+
+% When done
+probe1.probe_head_on = py.bool(false);
+probe2.probe_head_on = py.bool(false);</code></pre>
+        
+        <h2 id="troubleshooting">8. Troubleshooting</h2>
+        
+        <h3>Common Issues and Solutions</h3>
+        
+        <h4>Issue: "Unable to resolve the name py.importlib.import_module"</h4>
+        <div class="info-box">
+            <strong>Solution:</strong> This means Python is not properly configured in MATLAB. Check:
+            <ul>
+                <li>Run <code>pyenv</code> to verify Python is detected</li>
+                <li>Ensure Python 3.10+ is installed</li>
+                <li>Restart MATLAB after configuring Python</li>
+            </ul>
+        </div>
+        
+        <h4>Issue: "ModuleNotFoundError: No module named 'pmk_probes'"</h4>
+        <div class="info-box">
+            <strong>Solution:</strong> The pmk-probes package is not installed in the Python environment MATLAB is using.
+            <ul>
+                <li>Check which Python MATLAB is using: <code>pyenv</code></li>
+                <li>Install the package for that specific Python: <code>pip install pmk-probes</code></li>
+                <li>You may need to use the full path to pip, e.g., <code>C:\Python310\Scripts\pip.exe install pmk-probes</code></li>
+            </ul>
+        </div>
+        
+        <h4>Issue: "Serial port error" or "Cannot connect to power supply"</h4>
+        <div class="info-box">
+            <strong>Solution:</strong> 
+            <ul>
+                <li>Verify the COM port is correct (check Device Manager on Windows)</li>
+                <li>Ensure no other program is using the COM port</li>
+                <li>Check that the power supply is connected and powered on</li>
+                <li>On Linux, you may need permissions: <code>sudo usermod -a -G dialout $USER</code></li>
+            </ul>
+        </div>
+        
+        <h4>Issue: "Battery voltage reads 0.0"</h4>
+        <div class="info-box">
+            <strong>Solution:</strong> 
+            <ul>
+                <li>Wait ~200ms after turning off the probe head before reading battery voltage</li>
+                <li>Ensure the probe head is or was recently on</li>
+                <li>Check battery connection and charge level</li>
+            </ul>
+        </div>
+        
+        <h4>Issue: "Probe status shows ERROR"</h4>
+        <div class="info-box">
+            <strong>Solution:</strong> 
+            <ul>
+                <li>Check battery level - it may be too low</li>
+                <li>Power cycle the probe (turn probe head off and on)</li>
+                <li>Check connections to the power supply</li>
+                <li>Consult PMK support if error persists</li>
+            </ul>
+        </div>
+        
+        <h4>Issue: Converting Python types to MATLAB</h4>
+        <div class="info-box">
+            <strong>Solution:</strong> Use appropriate conversion functions:
+            <ul>
+                <li>Strings: <code>char(python_string)</code></li>
+                <li>Numbers: <code>double(python_number)</code></li>
+                <li>Booleans: <code>logical(python_bool)</code> or <code>py.bool(matlab_bool)</code></li>
+                <li>Lists/Tuples: <code>cell(python_list)</code></li>
+            </ul>
+        </div>
+        
+        <h3>Getting Help</h3>
+        
+        <p>If you encounter issues not covered here:</p>
+        <ul>
+            <li>Check the <a href="https://pmk-probes.readthedocs.io">online documentation</a></li>
+            <li>Review the Python package documentation for additional details</li>
+            <li>Contact PMK support at <a href="http://www.pmk.de">www.pmk.de</a></li>
+        </ul>
+        
+        <h2 id="reference">9. Reference</h2>
+        
+        <h3>FireFly Probe Properties</h3>
+        
+        <table>
+            <tr>
+                <th>Property</th>
+                <th>Type</th>
+                <th>Access</th>
+                <th>Description</th>
+            </tr>
+            <tr>
+                <td>metadata</td>
+                <td>FireFlyMetadata</td>
+                <td>Read-only</td>
+                <td>Probe metadata (serial number, model, dates, etc.)</td>
+            </tr>
+            <tr>
+                <td>probe_head_on</td>
+                <td>bool</td>
+                <td>Read/Write</td>
+                <td>Turn probe head on or off</td>
+            </tr>
+            <tr>
+                <td>probe_status_led</td>
+                <td>ProbeStates</td>
+                <td>Read-only</td>
+                <td>Current state of the probe</td>
+            </tr>
+            <tr>
+                <td>battery_voltage</td>
+                <td>float</td>
+                <td>Read-only</td>
+                <td>Battery voltage in volts</td>
+            </tr>
+            <tr>
+                <td>battery_indicator</td>
+                <td>tuple[LED]</td>
+                <td>Read-only</td>
+                <td>Battery level indicator (4 LEDs)</td>
+            </tr>
+            <tr>
+                <td>properties</td>
+                <td>PMKProbeProperties</td>
+                <td>Read-only</td>
+                <td>Probe capabilities (voltage range, attenuation)</td>
+            </tr>
+        </table>
+        
+        <h3>FireFly Probe Methods</h3>
+        
+        <table>
+            <tr>
+                <th>Method</th>
+                <th>Parameters</th>
+                <th>Description</th>
+            </tr>
+            <tr>
+                <td>auto_zero()</td>
+                <td>None</td>
+                <td>Perform auto-zero calibration</td>
+            </tr>
+            <tr>
+                <td>enable_expert_mode()</td>
+                <td>None</td>
+                <td>Enable expert mode (advanced users only)</td>
+            </tr>
+        </table>
+        
+        <h3>Metadata Fields</h3>
+        
+        <table>
+            <tr>
+                <th>Field</th>
+                <th>Type</th>
+                <th>Description</th>
+            </tr>
+            <tr>
+                <td>serial_number</td>
+                <td>str</td>
+                <td>Unique serial number</td>
+            </tr>
+            <tr>
+                <td>manufacturer</td>
+                <td>str</td>
+                <td>Manufacturer name (PMK)</td>
+            </tr>
+            <tr>
+                <td>model</td>
+                <td>str</td>
+                <td>Probe model</td>
+            </tr>
+            <tr>
+                <td>description</td>
+                <td>str</td>
+                <td>Product description</td>
+            </tr>
+            <tr>
+                <td>production_date</td>
+                <td>str</td>
+                <td>Manufacturing date</td>
+            </tr>
+            <tr>
+                <td>calibration_due_date</td>
+                <td>str</td>
+                <td>Next calibration due date</td>
+            </tr>
+            <tr>
+                <td>hardware_revision</td>
+                <td>str</td>
+                <td>Hardware revision number</td>
+            </tr>
+            <tr>
+                <td>software_revision</td>
+                <td>str</td>
+                <td>Firmware version</td>
+            </tr>
+            <tr>
+                <td>propagation_delay</td>
+                <td>float</td>
+                <td>Signal propagation delay (nanoseconds)</td>
+            </tr>
+        </table>
+        
+        <h3>Important Links</h3>
+        
+        <ul>
+            <li><a href="http://www.pmk.de/en/products/firefly">FireFly Product Page</a></li>
+            <li><a href="https://pmk-probes.readthedocs.io">PMK Probes Documentation</a></li>
+            <li><a href="https://pypi.org/project/pmk-probes/">pmk-probes on PyPI</a></li>
+            <li><a href="https://www.mathworks.com/help/matlab/call-python-libraries.html">MATLAB Python Integration Guide</a></li>
+        </ul>
+        
+        <div class="success-box">
+            <strong>Best Practices:</strong>
+            <ul>
+                <li>Always turn off the probe head when not in use to conserve battery</li>
+                <li>Perform auto-zero calibration before critical measurements</li>
+                <li>Monitor battery voltage regularly to avoid unexpected power loss</li>
+                <li>Allow the probe to warm up (3-5 seconds) after turning on the probe head</li>
+                <li>Keep the probe firmware updated for best performance</li>
+            </ul>
+        </div>
+        
+        <div class="footer">
+            <p>&copy; 2024 PMK Probing Solutions. All rights reserved.</p>
+            <p>This guide is for use with the pmk-probes Python package and PMK FireFly active oscilloscope probe.</p>
+            <p>For technical support, visit <a href="http://www.pmk.de">www.pmk.de</a></p>
+        </div>
+    </div>
+</body>
+</html>
