@@ -55,6 +55,11 @@ class _PMKProbe(PMKDevice, metaclass=ABCMeta):
     def __repr__(self):
         return f"{self.probe_model} at {self.channel.name} of {self.power_supply}"
 
+    @property
+    def _wire_channel(self) -> int:
+        """Translates the user-facing channel number to the wire channel via the power supply's channel map."""
+        return self.power_supply._channel_map.get(self.channel.value, self.channel.value)
+
     def _validate_probe(self, power_supply: _PMKPowerSupply, channel: Channel, allow_legacy: bool):
         if self.__class__ not in power_supply.supported_probe_types:
             raise ValueError(f"Probe {self.probe_model} is not supported by this power supply.")

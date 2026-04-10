@@ -19,6 +19,7 @@ class _PMKPowerSupply(PMKDevice):
     _i2c_addresses: dict[str, int] = {"metadata": 0x04}
     _addressing = "W"
     _num_channels = None
+    _channel_map: dict[int, int] = {}  # Maps user-facing channel number to wire channel number (empty = identity)
 
     def __init__(self, com_port: str = None, ip_address: str = None, verbose: bool = False):
         if com_port:
@@ -85,6 +86,7 @@ class _PMKPowerSupply(PMKDevice):
 class PS02(_PMKPowerSupply):
     """Class to control a PS02 power supply."""
     _num_channels = 2  # the PS02 has 2 channels
+    _channel_map = {1: 1, 2: 3}  # PS02 hardware uses wire channels 1 and 3 for its two ports
 
 
 class PS03(_PMKPowerSupply):

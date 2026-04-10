@@ -27,7 +27,7 @@ class Channel(Enum):
     CH2 = 2  # the second channel
     CH3 = 3  # the third channel (PS03 only)
     CH4 = 4  # the fourth channel (PS03 only)
-    CH5 = 5  # the fifth channel (PS03 only)
+    CH5 = 5  # the fifth channel (PS08 only)
     CH6 = 6  # the sixth channel (PS08 only)
     CH7 = 7  # the seventh channel (PS08 only)
     CH8 = 8  # the eigth channel (PS08 only)
@@ -49,6 +49,11 @@ class PMKDevice:
         self._serial_number = None
         self._simulated = simulated
         self._simulated_interface = EchoInterface()
+
+    @property
+    def _wire_channel(self) -> int:
+        """The channel number to use on the wire. Defaults to the channel's value; subclasses may override."""
+        return self.channel.value
 
     @property
     @abstractmethod
@@ -116,7 +121,7 @@ class PMKDevice:
         self._interface.write(string.encode())
         logging.info(f"Sent: {string}")
         # read the response and ensure it's correct: (STX, ACK, echo, read_payload, ETX, CR)
-        self._expect([STX, ACK, f"{self.channel.value}{cmd}".encode()])
+        self._expect([STX, ACK, f"{self._wire_channel}{cmd}".encode()])
         # read the payload
         if wr_rd == "RD":
             # length here means number of bytes, not number of characters
